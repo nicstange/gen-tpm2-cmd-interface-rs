@@ -124,26 +124,6 @@ pub enum TpmBuffer<'a> {{
 }}
 
 impl<'a> TpmBuffer<'a> {{
-    pub fn stabilize(&mut self) -> Result<(), TpmErr> {{
-        match self {{
-            Self::Borrowed(b) => {{
-                match b {{
-                    TpmBufferRef::Stable(_) => (),
-                    TpmBufferRef::Unstable(u) => {{
-                        let mut o = Vec::new();
-                        o.try_reserve_exact(u.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;
-                        o.extend_from_slice(u);
-                        #[cfg(feature = \"zeroize\")]
-                        let o = zeroize::Zeroizing::from(o);
-                        *self = Self::Owned(o);
-                    }},
-                }}
-            }},
-            Self::Owned(_) => (),
-        }};
-        Ok(())
-    }}
-
     pub fn into_owned(self) -> Result<TpmBuffer<'static>, TpmErr> {{
         let o = match self {{
             Self::Borrowed(b) => {{

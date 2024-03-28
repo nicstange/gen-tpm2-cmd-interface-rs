@@ -28,7 +28,6 @@ mod tagged_union_conversions;
 mod into_bufs_owner_impl;
 mod marshal_impl;
 mod marshalled_size_impl;
-mod stabilize_bufs_impl;
 mod try_clone_impl;
 mod unmarshal_impl;
 
@@ -785,10 +784,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         );
         let need_impl = need_impl
             || (contains_array && table_closure_deps.any(ClosureDepsFlags::ANY_TRY_CLONE))
-            || (references_inbuf
-                && table_closure_deps.any(
-                    ClosureDepsFlags::ANY_STABILIZE_BUFS | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
-                ));
+            || (references_inbuf && table_closure_deps.any(ClosureDepsFlags::ANY_INTO_BUFS_OWNER));
 
         if !table_deps.is_unconditional_true() {
             writeln!(out, "#[cfg({})]", Self::format_deps(&table_deps))?;
@@ -946,48 +942,31 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     )?;
                 }
 
-                if references_inbuf {
-                    if table_closure_deps.any(ClosureDepsFlags::ANY_STABILIZE_BUFS) {
-                        if !first {
-                            writeln!(iout)?;
-                        }
-                        first = false;
-                        self.gen_tagged_union_stabilize_bufs(
-                            &mut iout,
-                            table,
-                            table_closure_deps,
-                            &table_deps,
-                            discriminant_member,
-                            false,
-                            conditional && discriminant.discriminant_type_conditional,
-                        )?;
+                if references_inbuf && table_closure_deps.any(ClosureDepsFlags::ANY_INTO_BUFS_OWNER)
+                {
+                    if !first {
+                        writeln!(iout)?;
                     }
 
-                    if table_closure_deps.any(ClosureDepsFlags::ANY_INTO_BUFS_OWNER) {
-                        if !first {
-                            writeln!(iout)?;
-                        }
+                    self.gen_tagged_union_into_bufs_owner_intern(
+                        &mut iout,
+                        table,
+                        table_closure_deps,
+                        &table_deps,
+                        &table_name,
+                        discriminant_member,
+                        conditional && discriminant.discriminant_type_conditional,
+                        enable_in_place_into_bufs_owner,
+                    )?;
 
-                        self.gen_tagged_union_into_bufs_owner_intern(
+                    if table_closure_deps.any(ClosureDepsFlags::EXTERN_INTO_BUFS_OWNER) {
+                        writeln!(&mut iout)?;
+                        self.gen_structure_into_bufs_owner(
                             &mut iout,
                             table,
-                            table_closure_deps,
-                            &table_deps,
-                            &table_name,
-                            discriminant_member,
                             conditional && discriminant.discriminant_type_conditional,
                             enable_in_place_into_bufs_owner,
                         )?;
-
-                        if table_closure_deps.any(ClosureDepsFlags::EXTERN_INTO_BUFS_OWNER) {
-                            writeln!(&mut iout)?;
-                            self.gen_structure_into_bufs_owner(
-                                &mut iout,
-                                table,
-                                conditional && discriminant.discriminant_type_conditional,
-                                enable_in_place_into_bufs_owner,
-                            )?;
-                        }
                     }
                 }
                 writeln!(out, "}}")?;
@@ -1225,36 +1204,27 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     )?;
                 }
 
-                if references_inbuf {
-                    if table_closure_deps.any(ClosureDepsFlags::ANY_STABILIZE_BUFS) {
-                        if !first {
-                            writeln!(&mut iout)?;
-                        }
-                        first = false;
-                        self.gen_structure_stabilize_bufs(&mut iout, table, conditional)?;
+                if references_inbuf && table_closure_deps.any(ClosureDepsFlags::ANY_INTO_BUFS_OWNER)
+                {
+                    if !first {
+                        writeln!(iout)?;
                     }
 
-                    if table_closure_deps.any(ClosureDepsFlags::ANY_INTO_BUFS_OWNER) {
-                        if !first {
-                            writeln!(iout)?;
-                        }
+                    self.gen_structure_into_bufs_owner_intern(
+                        &mut iout,
+                        table,
+                        conditional,
+                        enable_in_place_into_bufs_owner,
+                    )?;
 
-                        self.gen_structure_into_bufs_owner_intern(
+                    if table_closure_deps.any(ClosureDepsFlags::EXTERN_INTO_BUFS_OWNER) {
+                        writeln!(&mut iout)?;
+                        self.gen_structure_into_bufs_owner(
                             &mut iout,
                             table,
                             conditional,
                             enable_in_place_into_bufs_owner,
                         )?;
-
-                        if table_closure_deps.any(ClosureDepsFlags::EXTERN_INTO_BUFS_OWNER) {
-                            writeln!(&mut iout)?;
-                            self.gen_structure_into_bufs_owner(
-                                &mut iout,
-                                table,
-                                conditional,
-                                enable_in_place_into_bufs_owner,
-                            )?;
-                        }
                     }
                 }
 
@@ -1360,9 +1330,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 let need_impl = closure_deps.any(ClosureDepsFlags::ANY_UNMARSHAL_OR_MARSHAL)
                     || (contains_array && closure_deps.any(ClosureDepsFlags::ANY_TRY_CLONE))
                     || (references_inbuf
-                        && closure_deps.any(
-                            ClosureDepsFlags::ANY_STABILIZE_BUFS | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
-                        ));
+                        && closure_deps.any(ClosureDepsFlags::ANY_INTO_BUFS_OWNER));
                 if need_impl {
                     writeln!(out)?;
                     if !table_deps.is_unconditional_true() {
@@ -1442,39 +1410,21 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         )?;
                     }
 
-                    if references_inbuf {
-                        if closure_deps.any(ClosureDepsFlags::ANY_STABILIZE_BUFS) {
-                            if !first {
-                                writeln!(iout)?;
-                            }
-                            first = false;
-                            self.gen_tagged_union_stabilize_bufs(
-                                &mut iout,
-                                table,
-                                &closure_deps,
-                                &table_deps,
-                                j,
-                                true,
-                                conditional && discriminant.discriminant_type_conditional,
-                            )?;
+                    if references_inbuf && closure_deps.any(ClosureDepsFlags::ANY_INTO_BUFS_OWNER) {
+                        if !first {
+                            writeln!(iout)?;
                         }
 
-                        if closure_deps.any(ClosureDepsFlags::ANY_INTO_BUFS_OWNER) {
-                            if !first {
-                                writeln!(iout)?;
-                            }
-
-                            self.gen_tagged_union_into_bufs_owner_intern(
-                                &mut iout,
-                                table,
-                                &closure_deps,
-                                &table_deps,
-                                &type_name,
-                                j,
-                                conditional && discriminant.discriminant_type_conditional,
-                                enable_in_place_into_bufs_owner,
-                            )?;
-                        }
+                        self.gen_tagged_union_into_bufs_owner_intern(
+                            &mut iout,
+                            table,
+                            &closure_deps,
+                            &table_deps,
+                            &type_name,
+                            j,
+                            conditional && discriminant.discriminant_type_conditional,
+                            enable_in_place_into_bufs_owner,
+                        )?;
                     }
                     writeln!(out, "}}")?;
                 }
