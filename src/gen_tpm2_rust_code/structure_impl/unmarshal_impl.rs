@@ -815,7 +815,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             writeln!(out, "}}")?;
             writeln!(
                 out,
-                "let (unmarshalled_{}, {}) = {}.consume({}_size);",
+                "let (unmarshalled_{}, {}) = {}.split_at({}_size);",
                 member_name, outbuf_name, inbuf_name, member_name
             )?;
             writeln!(
@@ -1091,21 +1091,21 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         let is_cryptable = self.structure_is_cryptable(table);
         let (decrypted_head_buf_arg_decl, unencrypted_tail_buf_arg_decl) = if is_cryptable {
             (
-                "decrypted_head_buf: Option<TpmBufferRef<'a>>, ",
-                "unencrypted_tail_buf: TpmBufferRef<'a>",
+                "decrypted_head_buf: Option<&'a [u8]>, ",
+                "unencrypted_tail_buf: &'a [u8]",
             )
         } else {
-            ("", "buf: TpmBufferRef<'a>")
+            ("", "buf: &'a [u8]")
         };
 
         if enable_in_place_unmarshal {
             writeln!(out,
-                     "fn unmarshal_intern{}(dst: *mut Self, {}{}{}) -> Result<TpmBufferRef<'a>, TpmErr> {{",
+                     "fn unmarshal_intern{}(dst: *mut Self, {}{}{}) -> Result<&'a [u8], TpmErr> {{",
                      lifetime_decl, decrypted_head_buf_arg_decl, unencrypted_tail_buf_arg_decl, limits_arg)?;
         } else {
             writeln!(
                 out,
-                "fn unmarshal_intern{}({}{}{}) -> Result<(TpmBufferRef<'a>, Self), TpmErr> {{",
+                "fn unmarshal_intern{}({}{}{}) -> Result<(&'a [u8], Self), TpmErr> {{",
                 lifetime_decl,
                 decrypted_head_buf_arg_decl,
                 unencrypted_tail_buf_arg_decl,
@@ -1821,7 +1821,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             }
 
             writeln!(out,
-                     "fn unmarshal_intern_selector{}(buf: TpmBufferRef<'a>) -> Result<(TpmBufferRef<'a>, {}), TpmErr> {{",
+                     "fn unmarshal_intern_selector{}(buf: &'a [u8]) -> Result<(&'a [u8], {}), TpmErr> {{",
                      lifetime_decl, Self::predefined_type_to_rust(discriminant_base))?;
 
             let mut iout = out.make_indent();
@@ -1873,20 +1873,20 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         if enable_in_place_unmarshal {
             if is_structure_member_repr {
                 writeln!(out,
-                         "fn unmarshal_intern{}(dst: *mut Self, selector: {}, buf: TpmBufferRef<'a>{}) -> Result<TpmBufferRef<'a>, TpmErr> {{",
+                         "fn unmarshal_intern{}(dst: *mut Self, selector: {}, buf: &'a [u8]{}) -> Result<&'a [u8], TpmErr> {{",
                          lifetime_decl, Self::predefined_type_to_rust(discriminant_base), limits_arg)?;
             } else {
                 writeln!(out,
-                         "fn unmarshal_intern{}(dst: *mut Self, buf: TpmBufferRef<'a>{}) -> Result<TpmBufferRef<'a>, TpmErr> {{",
+                         "fn unmarshal_intern{}(dst: *mut Self, buf: &'a [u8]{}) -> Result<&'a [u8], TpmErr> {{",
                          lifetime_decl, limits_arg)?;
             }
         } else if is_structure_member_repr {
             writeln!(out,
-                     "fn unmarshal_intern{}(selector: {}, buf: TpmBufferRef<'a>{}) -> Result<(TpmBufferRef<'a>, Self), TpmErr> {{",
+                     "fn unmarshal_intern{}(selector: {}, buf: &'a [u8]{}) -> Result<(&'a [u8], Self), TpmErr> {{",
                      lifetime_decl, Self::predefined_type_to_rust(discriminant_base), limits_arg)?;
         } else {
             writeln!(out,
-                     "fn unmarshal_intern{}(buf: TpmBufferRef<'a>{}) -> Result<(TpmBufferRef<'a>, Self), TpmErr> {{",
+                     "fn unmarshal_intern{}(buf: &'a [u8]{}) -> Result<(&'a [u8], Self), TpmErr> {{",
                      lifetime_decl, limits_arg)?;
         }
 
@@ -2384,18 +2384,18 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             unenctryped_tail_buf,
         ) = if is_cryptable {
             (
-                "decrypted_head_buf: Option<TpmBufferRef<'a>>, ",
+                "decrypted_head_buf: Option<&'a [u8]>, ",
                 "decrypted_head_buf, ",
-                "unencrypted_tail_buf: TpmBufferRef<'a>",
+                "unencrypted_tail_buf: &'a [u8]",
                 "unencrypted_tail_buf",
             )
         } else {
-            ("", "", "buf: TpmBufferRef<'a>", "buf")
+            ("", "", "buf: &'a [u8]", "buf")
         };
 
         writeln!(
             out,
-            "pub fn unmarshal{}({}{}{}) -> Result<(TpmBufferRef<'a>, Box<Self>), TpmErr> {{",
+            "pub fn unmarshal{}({}{}{}) -> Result<(&'a [u8], Box<Self>), TpmErr> {{",
             lifetime_decl, decrypted_head_buf_arg_decl, unencrypted_tail_buf_arg_decl, limits_arg
         )?;
 

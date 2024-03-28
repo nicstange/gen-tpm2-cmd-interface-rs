@@ -380,7 +380,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 ""
             };
             writeln!(&mut iout,
-                     "{}fn unmarshal<'a>(buf: TpmBufferRef<'a>{}) -> Result<(TpmBufferRef<'a>, Self), TpmErr> {{",
+                     "{}fn unmarshal<'a>(buf: &'a [u8]{}) -> Result<(&'a [u8], Self), TpmErr> {{",
                      pub_spec, limits_arg)?;
             let mut iiout = iout.make_indent();
             writeln!(

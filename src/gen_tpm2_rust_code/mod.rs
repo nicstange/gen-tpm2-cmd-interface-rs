@@ -71,52 +71,8 @@ pub enum TpmErr {{
 }}
 
 #[derive(Clone, Debug)]
-pub enum TpmBufferRef<'a> {{
-    Unstable(&'a [u8]),
-    Stable(&'a [u8]),
-}}
-
-impl<'a> TpmBufferRef<'a> {{
-    pub fn len(&self) -> usize {{
-        <Self as ops::Deref>::deref(self).len()
-    }}
-
-    pub fn consume(self, mid: usize) -> (Self, Self) {{
-        match self {{
-            Self::Unstable(slice) => {{
-                let split = slice.split_at(mid);
-                (Self::Unstable(split.0), Self::Unstable(split.1))
-            }},
-            Self::Stable(slice) => {{
-                let split = slice.split_at(mid);
-                (Self::Stable(split.0), Self::Stable(split.1))
-            }},
-        }}
-    }}
-}}
-
-impl<'a> ops::Deref for TpmBufferRef<'a> {{
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {{
-        match self {{
-            Self::Unstable(slice) | Self::Stable(slice) => slice,
-        }}
-    }}
-}}
-
-impl<'a> convert::From<&'a TpmBuffer<'a>> for TpmBufferRef<'a> {{
-    fn from(value: &'a TpmBuffer<'a>) -> Self {{
-        match value {{
-            TpmBuffer::Borrowed(b) => b.clone(),
-            TpmBuffer::Owned(o) => TpmBufferRef::Stable(o.as_ref()),
-        }}
-    }}
-}}
-
-#[derive(Clone, Debug)]
 pub enum TpmBuffer<'a> {{
-    Borrowed(TpmBufferRef<'a>),
+    Borrowed(&'a [u8]),
     #[cfg(not(feature = \"zeroize\"))]
     Owned(Vec<u8>),
     #[cfg(feature = \"zeroize\")]
@@ -145,14 +101,14 @@ impl<'a> ops::Deref for TpmBuffer<'a> {{
 
     fn deref(&self) -> &Self::Target {{
         match self {{
-            Self::Borrowed(b) => b.deref(),
+            Self::Borrowed(b) => b,
             Self::Owned(o) => &o,
         }}
     }}
 }}
 
-impl<'a> convert::From<TpmBufferRef<'a>> for TpmBuffer<'a> {{
-    fn from(value: TpmBufferRef<'a>) -> Self {{
+impl<'a> convert::From<&'a [u8]> for TpmBuffer<'a> {{
+    fn from(value: &'a [u8]) -> Self {{
         Self::Borrowed(value)
     }}
 }}
@@ -168,12 +124,6 @@ impl<'a> default::Default for TpmBuffer<'a> {{
 
 impl<'a> PartialEq for TpmBuffer<'a> {{
     fn eq(&self, other: &Self) -> bool {{
-        if matches!(self, Self::Borrowed(TpmBufferRef::Unstable(_)))
-           || matches!(other, Self::Borrowed(TpmBufferRef::Unstable(_)))
-        {{
-            return false;
-        }}
-
         <Self as ops::Deref>::deref(self) == <Self as ops::Deref>::deref(other)
     }}
 }}
@@ -190,7 +140,7 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
             for s in ['u', 'i'] {
                 let t = format!("{}{}", s, b);
                 writeln!(&mut out)?;
-                writeln!(&mut out,"fn unmarshal_{}<'a>(buf: TpmBufferRef<'a>) -> Result<(TpmBufferRef<'a>, {}), TpmErr> {{",
+                writeln!(&mut out,"fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{",
                          &t, &t)?;
                 let mut iout = out.make_indent();
                 writeln!(&mut iout, "if buf.len() < mem::size_of::<{}>() {{", &t)?;
@@ -198,7 +148,7 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
                 writeln!(&mut iout, "}}")?;
                 writeln!(
                     &mut iout,
-                    "let (consumed, buf) = buf.consume(mem::size_of::<{}>());",
+                    "let (consumed, buf) = buf.split_at(mem::size_of::<{}>());",
                     &t
                 )?;
                 if enable_unaligned_accesses {
