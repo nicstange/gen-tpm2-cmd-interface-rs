@@ -99,7 +99,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             if selected_union_members.is_empty() {
                 writeln!(
                     &mut iiout,
-                    "Self::{} => {}::{},",
+                    "Self::{} => Ok({}::{}),",
                     &enum_member_name, tagged_union_name, enum_member_name
                 )?;
                 continue;
