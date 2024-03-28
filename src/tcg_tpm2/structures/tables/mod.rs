@@ -843,11 +843,10 @@ impl StructuresPartTables {
 
                         if closure_deps.intersects(
                             ClosureDepsFlags::ANY_TRY_CLONE
-                                | ClosureDepsFlags::ANY_STABILIZE_BUFS
                                 | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
                         ) {
                             eprintln!(
-                                "error: try-clone/stabilize-buffers/into-buffers-owner dependency on \"{}\" bits type",
+                                "error: try-clone/into-buffers-owner dependency on \"{}\" bits type",
                                 &t.name
                             );
                             return Err(io::Error::from(io::ErrorKind::InvalidData));
@@ -877,11 +876,10 @@ impl StructuresPartTables {
                             return Err(io::Error::from(io::ErrorKind::InvalidData));
                         } else if closure_deps.intersects(
                             ClosureDepsFlags::ANY_TRY_CLONE
-                                | ClosureDepsFlags::ANY_STABILIZE_BUFS
                                 | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
                         ) {
                             eprintln!(
-                                "error: try-clone/stabilize-buffers/into-buffers-owner dependency on \"{}\" constants type",
+                                "error: try-clone/into-buffers-owner dependency on \"{}\" constants type",
                                 &t.name
                             );
                             return Err(io::Error::from(io::ErrorKind::InvalidData));
@@ -943,11 +941,10 @@ impl StructuresPartTables {
 
                         if closure_deps.intersects(
                             ClosureDepsFlags::ANY_TRY_CLONE
-                                | ClosureDepsFlags::ANY_STABILIZE_BUFS
                                 | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
                         ) {
                             eprintln!(
-                                "error: try-clone/stabilize-buffers/into-buffers-owner dependency on \"{}\" type",
+                                "error: try-clone/into-buffers-owner dependency on \"{}\" type",
                                 &t.name
                             );
                             return Err(io::Error::from(io::ErrorKind::InvalidData));
@@ -1149,7 +1146,6 @@ impl StructuresPartTables {
                             .mod_all_closure_deps_set_cond(
                                 ClosureDepsFlags::ANY_UNMARSHAL_OR_MARSHAL
                                     | ClosureDepsFlags::ANY_TRY_CLONE
-                                    | ClosureDepsFlags::ANY_STABILIZE_BUFS
                                     | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
                                 ClosureDepsFlags::PUBLIC_DEFINITION,
                             )
@@ -1164,7 +1160,6 @@ impl StructuresPartTables {
                             .mod_all_closure_deps_set_cond(
                                 ClosureDepsFlags::ANY_UNMARSHAL_OR_MARSHAL
                                     | ClosureDepsFlags::ANY_TRY_CLONE
-                                    | ClosureDepsFlags::ANY_STABILIZE_BUFS
                                     | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
                                 ClosureDepsFlags::PUBLIC_DEFINITION,
                             )
@@ -1536,7 +1531,6 @@ impl StructuresPartTables {
                                 let container_deps = container_deps.mod_all_closure_deps(
                                     ClosureDepsFlags::empty(),
                                     ClosureDepsFlags::ANY_TRY_CLONE
-                                        | ClosureDepsFlags::ANY_STABILIZE_BUFS
                                         | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
                                 );
                                 assert!(!to_conditional);
@@ -1549,7 +1543,6 @@ impl StructuresPartTables {
                                 let container_deps = container_deps.mod_all_closure_deps(
                                     ClosureDepsFlags::empty(),
                                     ClosureDepsFlags::ANY_TRY_CLONE
-                                        | ClosureDepsFlags::ANY_STABILIZE_BUFS
                                         | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
                                 );
                                 assert!(!to_conditional);
@@ -1562,7 +1555,6 @@ impl StructuresPartTables {
                                 let container_deps = container_deps.mod_all_closure_deps(
                                     ClosureDepsFlags::empty(),
                                     ClosureDepsFlags::ANY_TRY_CLONE
-                                        | ClosureDepsFlags::ANY_STABILIZE_BUFS
                                         | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
                                 );
                                 let mut t = self.get_type_mut(*index);
@@ -2047,7 +2039,6 @@ impl StructuresPartTables {
                                                 ClosureDepsFlags::empty(),
                                                 size_deps
                                                     | ClosureDepsFlags::ANY_TRY_CLONE
-                                                    | ClosureDepsFlags::ANY_STABILIZE_BUFS
                                                     | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
                                             );
 

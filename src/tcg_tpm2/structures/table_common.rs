@@ -47,20 +47,16 @@ bitflags! {
         const INTERN_TRY_CLONE = 0x80;
         const ANY_TRY_CLONE = Self::EXTERN_TRY_CLONE.bits | Self::INTERN_TRY_CLONE.bits;
 
-        const EXTERN_STABILIZE_BUFS = 0x100;
-        const INTERN_STABILIZE_BUFS = 0x200;
-        const ANY_STABILIZE_BUFS = Self::EXTERN_STABILIZE_BUFS.bits | Self::INTERN_STABILIZE_BUFS.bits;
-
-        const EXTERN_INTO_BUFS_OWNER = 0x400;
-        const INTERN_INTO_BUFS_OWNER = 0x800;
+        const EXTERN_INTO_BUFS_OWNER = 0x100;
+        const INTERN_INTO_BUFS_OWNER = 0x200;
         const ANY_INTO_BUFS_OWNER = Self::EXTERN_INTO_BUFS_OWNER.bits | Self::INTERN_INTO_BUFS_OWNER.bits;
 
-        const EXTERN_SIZE = 0x1000;
-        const INTERN_SIZE = 0x2000;
+        const EXTERN_SIZE = 0x400;
+        const INTERN_SIZE = 0x800;
         const ANY_SIZE = Self::EXTERN_SIZE.bits | Self::INTERN_SIZE.bits;
 
-        const EXTERN_MAX_SIZE = 0x4000;
-        const INTERN_MAX_SIZE = 0x8000;
+        const EXTERN_MAX_SIZE = 0x1000;
+        const INTERN_MAX_SIZE = 0x2000;
         const ANY_MAX_SIZE = Self::EXTERN_MAX_SIZE.bits | Self::INTERN_MAX_SIZE.bits;
     }
 }
@@ -136,9 +132,6 @@ impl ClosureDeps {
         if existing.intersects(ClosureDepsFlags::EXTERN_TRY_CLONE) {
             flags.remove(ClosureDepsFlags::INTERN_TRY_CLONE);
         }
-        if existing.intersects(ClosureDepsFlags::EXTERN_STABILIZE_BUFS) {
-            flags.remove(ClosureDepsFlags::INTERN_STABILIZE_BUFS);
-        }
         if existing.intersects(ClosureDepsFlags::EXTERN_INTO_BUFS_OWNER) {
             flags.remove(ClosureDepsFlags::INTERN_INTO_BUFS_OWNER);
         }
@@ -175,11 +168,6 @@ impl ClosureDeps {
             && !set.intersects(ClosureDepsFlags::INTERN_TRY_CLONE)
         {
             assert!(clear.intersects(ClosureDepsFlags::INTERN_TRY_CLONE));
-        }
-        if clear.intersects(ClosureDepsFlags::EXTERN_STABILIZE_BUFS)
-            && !set.intersects(ClosureDepsFlags::INTERN_STABILIZE_BUFS)
-        {
-            assert!(clear.intersects(ClosureDepsFlags::INTERN_STABILIZE_BUFS));
         }
         if clear.intersects(ClosureDepsFlags::EXTERN_INTO_BUFS_OWNER)
             && !set.intersects(ClosureDepsFlags::INTERN_INTO_BUFS_OWNER)
@@ -284,11 +272,6 @@ impl ClosureDeps {
             if flags.intersects(ClosureDepsFlags::EXTERN_TRY_CLONE) {
                 flags.remove(ClosureDepsFlags::EXTERN_TRY_CLONE);
                 flags.insert(ClosureDepsFlags::INTERN_TRY_CLONE);
-            }
-
-            if flags.intersects(ClosureDepsFlags::EXTERN_STABILIZE_BUFS) {
-                flags.remove(ClosureDepsFlags::EXTERN_STABILIZE_BUFS);
-                flags.insert(ClosureDepsFlags::INTERN_STABILIZE_BUFS);
             }
 
             if flags.intersects(ClosureDepsFlags::EXTERN_INTO_BUFS_OWNER) {
