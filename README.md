@@ -25,9 +25,8 @@ Generate TCG TPM2 interface code in Rust.
   `IMPLEMENTATION_PCR`, if needed. Furthermore, certain limits like `MAX_DIGEST_SIZE` are getting computed in accordance
   to the set of hashes enabled in the Cargo feature configuration.
 - Flexible input buffer management. Unmarshalled structures' byte array members all reference lean slices of the input
-  buffer initially, alongside some information provided by the environment on whether the memory contents are stable or
-  susceptible to modify-after-validate attacks. Primitives for stabilizing the buffers into owned copies are provided
-  and can be invoked selectively on an as-needed basis.
+  buffer initially. Primitives for transforming the buffers into owned copies are provided and can be invoked selectively
+  on an as-needed basis.
 
 ## Compilation
 A plain
@@ -107,7 +106,6 @@ The flags identifying the desired code type generation are:
 | `-u` | Emit unmarshalling code, implies `-d`.                                                           |
 | `-m` | Emit marshalling code, implies `-d`.                                                             |
 | `-l` | Emit a `::try_clone()` implementation for making an instance an owner of its referenced buffers. |
-| `-s` | Emit a `::stabilize()` implementation for stabilizing an instance's referenced buffers.          |
 
 Example:
 ```
