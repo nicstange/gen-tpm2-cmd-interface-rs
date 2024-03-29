@@ -205,8 +205,12 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
                     writeln!(&mut iout, "let p = produced.as_mut_ptr() as *mut {};", &t)?;
                     writeln!(&mut iout, "unsafe{{p.write_unaligned(value)}};")?;
                 } else {
-                    writeln!(&mut iout, "let marshalled = value.to_be_bytes();")?;
-                    writeln!(&mut iout, "produced.copy_from_slice(&marshalled);")?;
+                    writeln!(
+                        &mut iout,
+                        "let produced = <&mut [u8; mem::size_of::<{}>()]>::try_from(produced).map_err(|_| TpmErr::InternalErr)?;",
+                        &t
+                    )?;
+                    writeln!(&mut iout, "*produced = value.to_be_bytes();")?;
                 }
                 writeln!(&mut iout, "Ok(buf)")?;
                 writeln!(&mut out, "}}")?;
