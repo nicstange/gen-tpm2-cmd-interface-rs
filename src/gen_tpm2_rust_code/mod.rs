@@ -173,9 +173,12 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
                     writeln!(&mut iout, "let value = unsafe{{p.read_unaligned()}};")?;
                     writeln!(&mut iout, "let value = {}::from_be(value);", &t)?;
                 } else {
-                    writeln!(&mut iout, "let consumed: [u8; mem::size_of::<{}>()] = (&consumed as &[u8]).try_into().unwrap();",
-                             &t)?;
-                    writeln!(&mut iout, "let value = {}::from_be_bytes(consumed);", &t)?;
+                    writeln!(
+                        &mut iout,
+                        "let consumed = <&[u8; mem::size_of::<{}>()]>::try_from(consumed).map_err(|_| TpmErr::InternalErr)?;",
+                        &t
+                    )?;
+                    writeln!(&mut iout, "let value = {}::from_be_bytes(*consumed);", &t)?;
                 }
                 writeln!(&mut iout, "Ok((buf, value))")?;
                 writeln!(&mut out, "}}")?;
