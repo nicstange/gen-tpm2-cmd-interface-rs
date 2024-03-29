@@ -194,7 +194,7 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
                 let mut iout = out.make_indent();
                 writeln!(
                     &mut iout,
-                    "let (produced, buf) = buf.split_at_mut(mem::size_of::<{}>());",
+                    "let (produced, buf) = split_slice_at_mut(buf, mem::size_of::<{}>())?;",
                     &t
                 )?;
                 if enable_unaligned_accesses {
