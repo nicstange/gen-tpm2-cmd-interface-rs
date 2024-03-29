@@ -167,14 +167,7 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
                 writeln!(&mut out,"fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{",
                          &t, &t)?;
                 let mut iout = out.make_indent();
-                writeln!(&mut iout, "if buf.len() < mem::size_of::<{}>() {{", &t)?;
-                self.format_error_return(&mut iout.make_indent(), None, error_rc_insufficient)?;
-                writeln!(&mut iout, "}}")?;
-                writeln!(
-                    &mut iout,
-                    "let (consumed, buf) = buf.split_at(mem::size_of::<{}>());",
-                    &t
-                )?;
+                writeln!(&mut iout, "let (consumed, buf) = split_slice_at(buf, mem::size_of::<{}>())?;", &t)?;
                 if enable_unaligned_accesses {
                     writeln!(&mut iout, "let p = consumed.as_ptr() as *const {};", &t)?;
                     writeln!(&mut iout, "let value = unsafe{{p.read_unaligned()}};")?;
