@@ -49,7 +49,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             StructureTableEntryResolvedBaseType::Predefined(p) => {
                 writeln!(
                     out,
-                    "let {} = marshal_{}({}, {});",
+                    "let {} = marshal_{}({}, {})?;",
                     outbuf_name,
                     Self::predefined_type_to_rust(*p),
                     inbuf_name,
@@ -61,7 +61,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             | StructureTableEntryResolvedBaseType::Type(_) => {
                 writeln!(
                     out,
-                    "let {} = {}.marshal({});",
+                    "let {} = {}.marshal({})?;",
                     outbuf_name, src_spec, inbuf_name
                 )?;
             }
@@ -409,7 +409,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         writeln!(&mut iiout, "}};")?;
                         writeln!(
                             &mut iiout,
-                            "let buf = marshal_{}(buf, {});",
+                            "let buf = marshal_{}(buf, {})?;",
                             Self::predefined_type_to_rust(base_type),
                             &acc_size_name
                         )?;
@@ -452,7 +452,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         writeln!(&mut iiout, "}};")?;
                         writeln!(
                             &mut iiout,
-                            "let buf = marshal_{}(buf, marshalled_{});",
+                            "let buf = marshal_{}(buf, marshalled_{})?;",
                             Self::predefined_type_to_rust(base_type),
                             &member_name
                         )?;
@@ -478,7 +478,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         "self.".to_owned() + &Self::format_structure_member_name(&entry.name);
                     writeln!(
                         &mut iout,
-                        "let buf = {}.marshal_intern_selector(buf);",
+                        "let buf = {}.marshal_intern_selector(buf)?;",
                         src_spec
                     )?;
                 }
@@ -613,7 +613,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             }
             writeln!(
                 out,
-                "fn marshal_intern_selector<'{}>(&self, buf: &'{} mut [u8]) -> &'{} mut [u8] {{",
+                "fn marshal_intern_selector<'{}>(&self, buf: &'{} mut [u8]) -> Result<&'{} mut [u8], TpmErr> {{",
                 buf_lifetime, buf_lifetime, buf_lifetime
             )?;
             let mut iout = out.make_indent();
@@ -933,7 +933,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             writeln!(&mut iiiout, "let selector = {};", selector_value.0)?;
                             writeln!(
                                 &mut iiiout,
-                                "let buf = marshal_{}(buf, selector);",
+                                "let buf = marshal_{}(buf, selector)?;",
                                 Self::predefined_type_to_rust(discriminant_base)
                             )?;
                         }
@@ -980,7 +980,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
                             writeln!(
                                 &mut iiiiout,
-                                "let buf = marshal_{}(buf, {});",
+                                "let buf = marshal_{}(buf, {})?;",
                                 Self::predefined_type_to_rust(base_type),
                                 &acc_size_name
                             )?;

@@ -335,7 +335,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             };
             writeln!(
                 &mut iout,
-                "{}fn marshal<'a>(&self, buf: &'a mut [u8]) -> &'a mut [u8] {{",
+                "{}fn marshal<'a>(&self, buf: &'a mut [u8]) -> Result<&'a mut [u8], TpmErr> {{",
                 pub_spec
             )?;
             let mut iiout = iout.make_indent();

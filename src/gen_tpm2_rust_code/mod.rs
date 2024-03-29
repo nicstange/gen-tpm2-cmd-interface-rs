@@ -171,7 +171,7 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
                 writeln!(&mut out)?;
                 writeln!(
                     &mut out,
-                    "fn marshal_{}<'a>(buf: &mut [u8], value: {}) -> &mut [u8] {{",
+                    "fn marshal_{}<'a>(buf: &mut [u8], value: {}) -> Result<&mut [u8], TpmErr> {{",
                     &t, &t
                 )?;
                 let mut iout = out.make_indent();
@@ -188,7 +188,7 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
                     writeln!(&mut iout, "let marshalled = value.to_be_bytes();")?;
                     writeln!(&mut iout, "produced.copy_from_slice(&marshalled);")?;
                 }
-                writeln!(&mut iout, "buf")?;
+                writeln!(&mut iout, "Ok(buf)")?;
                 writeln!(&mut out, "}}")?;
             }
         }
