@@ -808,16 +808,30 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         writeln!(out, "}};")?;
 
         if is_byte_array {
-            writeln!(out, "if {}_size > {}.len() {{", member_name, inbuf_name)?;
-            let mut iout = out.make_indent();
-            err_cleanup(&mut iout)?;
-            self.format_error_return(&mut iout, None, error_rc_insufficient)?;
-            writeln!(out, "}}")?;
             writeln!(
                 out,
-                "let (unmarshalled_{}, {}) = {}.split_at({}_size);",
-                member_name, outbuf_name, inbuf_name, member_name
+                "let (unmarshalled_{}, {}) = match split_slice_at({}, {}_size) {{",
+                member_name,
+                outbuf_name,
+                inbuf_name,
+                member_name,
             )?;
+            let mut iout = out.make_indent();
+            writeln!(
+                &mut iout,
+                "Ok((unmarshalled_{}, {})) => (unmarshalled_{}, {}),",
+                member_name,
+                outbuf_name,
+                member_name,
+                outbuf_name,
+            )?;
+            writeln!(&mut iout,"Err(e) => {{",)?;
+            let mut iiout = iout.make_indent();
+            err_cleanup(&mut iiout)?;
+            writeln!(&mut iiout, "return Err(e);")?;
+            writeln!(&mut iout,"}},",)?;
+            writeln!(out, "}};")?;
+
             writeln!(
                 out,
                 "let unmarshalled_{} = TpmBuffer::from(unmarshalled_{});",
