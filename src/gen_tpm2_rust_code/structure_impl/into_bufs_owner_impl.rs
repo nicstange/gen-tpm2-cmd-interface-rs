@@ -785,17 +785,17 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             if !self_is_boxed {
                 writeln!(
                     out,
-                    "pub fn into_bufs_owner(self) -> Result<{}<'static>, TpmErr> {{",
+                    "pub fn into_bufs_owner(this: Self) -> Result<{}<'static>, TpmErr> {{",
                     table_name
                 )?;
                 let mut iout = out.make_indent();
-                writeln!(&mut iout, "self.into_bufs_owner_intern()")?;
+                writeln!(&mut iout, "this.into_bufs_owner_intern()")?;
                 writeln!(out, "}}")?;
             } else {
-                writeln!(out, "pub fn into_bufs_owner(self: Box<Self>) -> Result<Box<{}<'static>>, TpmErr> {{",
+                writeln!(out, "pub fn into_bufs_owner(this: Box<Self>) -> Result<Box<{}<'static>>, TpmErr> {{",
                          table_name)?;
                 let mut iout = out.make_indent();
-                writeln!(&mut iout, "let this = *self;")?;
+                writeln!(&mut iout, "let this = *this;")?;
                 writeln!(&mut iout,
                          "Ok(Box::try_new(this.into_bufs_owner_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)")?;
                 writeln!(out, "}}")?;
@@ -803,25 +803,25 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         } else if !self_is_boxed {
             writeln!(
                 out,
-                "pub fn into_bufs_owner(mut self) -> Result<{}<'static>, TpmErr> {{",
+                "pub fn into_bufs_owner(mut this: Self) -> Result<{}<'static>, TpmErr> {{",
                 table_name
             )?;
             let mut iout = out.make_indent();
-            writeln!(&mut iout, "self.into_bufs_owner_intern()?;")?;
+            writeln!(&mut iout, "this.into_bufs_owner_intern()?;")?;
             writeln!(
                 &mut iout,
-                "Ok(unsafe {{ mem::transmute::<Self, {}<'static>>(self) }})",
+                "Ok(unsafe {{ mem::transmute::<Self, {}<'static>>(this) }})",
                 table_name
             )?;
             writeln!(out, "}}")?;
         } else {
-            writeln!(out, "pub fn into_bufs_owner(mut self: Box<Self>) -> Result<Box<{}<'static>>, TpmErr> {{",
+            writeln!(out, "pub fn into_bufs_owner(mut this: Box<Self>) -> Result<Box<{}<'static>>, TpmErr> {{",
                      table_name)?;
             let mut iout = out.make_indent();
-            writeln!(&mut iout, "self.into_bufs_owner_intern()?;")?;
+            writeln!(&mut iout, "this.into_bufs_owner_intern()?;")?;
             writeln!(
                 &mut iout,
-                "Ok(unsafe {{ mem::transmute::<Box<Self>, Box<{}<'static>>>(self) }})",
+                "Ok(unsafe {{ mem::transmute::<Box<Self>, Box<{}<'static>>>(this) }})",
                 table_name
             )?;
             writeln!(out, "}}")?;
