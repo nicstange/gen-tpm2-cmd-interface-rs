@@ -32,6 +32,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     pub fn generate<W: io::Write>(
         &self,
         out: W,
+        enable_panic_free: bool,
         enable_unaligned_accesses: bool,
         enable_enum_transmute: bool,
         enable_in_place_unmarshal: bool,

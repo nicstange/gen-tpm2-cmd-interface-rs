@@ -11,7 +11,8 @@ Generate TCG TPM2 interface code in Rust.
   complete and self-contained code.
 - Natural mapping of TCG TPM2 Library type to Rust types. In particular, structure types resembling the "discriminated
   union" pattern are represented as Rust enums.
-- No `unsafe` code by default. Possibility to opt-in to certain `unsafe` optimizations.
+- No `unsafe` code by default. Possibility to opt-in to certain `unsafe` optimizations, as well as to panic-free
+  code requiring certain `unsafe` constructs.
 - `[no_std]` compatible.
 - Embedded-friendly memory handling. All unmarshalled structure instances are allocated on the heap in order to avoid
   stack overruns. Memory allocations don't fail with a panic, but gracefully return with `TPM_RC_MEMORY`.

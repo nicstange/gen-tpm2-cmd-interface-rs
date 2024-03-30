@@ -17,6 +17,9 @@ struct Cli {
     #[arg(name = "tables-file", short, long, action = clap::ArgAction::Append, required = true)]
     input_files: Vec<path::PathBuf>,
 
+    #[arg(name = "enable-unsafe-panic-free", long)]
+    enable_panic_free: bool,
+
     #[arg(name = "enable-unsafe-unaligned-accesses", long)]
     enable_unaligned_accesses: bool,
 
@@ -123,6 +126,7 @@ fn main() -> Result<(), io::Error> {
     let codegen = gen_tpm2_rust_code::Tpm2InterfaceRustCodeGenerator::new(&tables);
     codegen.generate(
         &mut io::stdout(),
+        cli.enable_panic_free,
         cli.enable_unaligned_accesses,
         cli.enable_enum_transmute,
         cli.enable_in_place_unmarshal,
