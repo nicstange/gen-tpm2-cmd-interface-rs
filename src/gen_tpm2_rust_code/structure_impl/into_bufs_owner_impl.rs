@@ -795,7 +795,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 writeln!(out, "pub fn into_bufs_owner(this: Box<Self>) -> Result<Box<{}<'static>>, TpmErr> {{",
                          table_name)?;
                 let mut iout = out.make_indent();
-                writeln!(&mut iout, "let this = *this;")?;
+                writeln!(&mut iout, "let this = Box::into_inner(this);")?;
                 writeln!(&mut iout,
                          "Ok(Box::try_new(this.into_bufs_owner_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)")?;
                 writeln!(out, "}}")?;
