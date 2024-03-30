@@ -146,7 +146,11 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
         writeln!(&mut iout, "if s.len() < mid {{")?;
         self.format_error_return(&mut iout.make_indent(), None, error_rc_insufficient)?;
         writeln!(&mut iout, "}}")?;
-        writeln!(&mut iout, "Ok(s.split_at(mid))")?;
+        if !enable_panic_free {
+            writeln!(&mut iout, "Ok(s.split_at(mid))")?;
+        } else {
+            writeln!(&mut iout, "Ok(unsafe {{ s.split_at_unchecked(mid) }})")?;
+        }
         writeln!(&mut out, "}}")?;
 
         writeln!(&mut out)?;
@@ -158,7 +162,11 @@ impl<'a> PartialEq for TpmBuffer<'a> {{
         writeln!(&mut iout, "if s.len() < mid {{")?;
         writeln!(&mut iout.make_indent(), "return Err(TpmErr::InternalErr);")?;
         writeln!(&mut iout, "}}")?;
-        writeln!(&mut iout, "Ok(s.split_at_mut(mid))")?;
+        if !enable_panic_free {
+            writeln!(&mut iout, "Ok(s.split_at_mut(mid))")?;
+        } else {
+            writeln!(&mut iout, "Ok(unsafe {{ s.split_at_mut_unchecked(mid) }})")?;
+        }
         writeln!(&mut out, "}}")?;
 
         for b in [8, 16, 32, 64] {
