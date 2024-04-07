@@ -73,10 +73,7 @@ pub enum TpmErr {{
 #[derive(Clone, Debug)]
 pub enum TpmBuffer<'a> {{
     Borrowed(&'a [u8]),
-    #[cfg(not(feature = \"zeroize\"))]
     Owned(Vec<u8>),
-    #[cfg(feature = \"zeroize\")]
-    Owned(zeroize::Zeroizing<Vec<u8>>),
 }}
 
 impl<'a> TpmBuffer<'a> {{
@@ -86,13 +83,23 @@ impl<'a> TpmBuffer<'a> {{
                 let mut o = Vec::new();
                 o.try_reserve_exact(b.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;
                 o.extend_from_slice(&b);
-                #[cfg(feature = \"zeroize\")]
-                let o = zeroize::Zeroizing::from(o);
                 o
             }},
             Self::Owned(o) => o,
         }};
         Ok(TpmBuffer::<'static>::Owned(o))
+    }}
+}}
+
+#[cfg(zeroize)]
+impl<'a> Drop for TpmBuffer<'a> {{
+    fn drop(&mut self) {{
+        match self {{
+            Self::Borrowed(_) => (),
+            Self::Owned(o) => {{
+                <&mut [u8] as zeroize::Zeroize>::zeroize(o.deref_mut());
+            }}
+        }}
     }}
 }}
 
