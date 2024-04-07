@@ -113,11 +113,13 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 // At this point only compiletime constant sizes are handled, runtime constant
                 // sizes would require error handling.
                 assert_eq!(Self::structure_has_fixed_size(&table), (true, true));
-                let type_spec =
-                    self.format_structure_member_plain_type(plain_type, conditional, true);
+                let mut type_spec = table.name.to_ascii_lowercase();
+                if conditional {
+                    type_spec += "_wcv";
+                }
                 let member_size_type = self.determine_structure_max_size_type(&table).unwrap();
                 (
-                    format!("{}::marshalled_size()", type_spec),
+                    format!("{}_marshalled_size()", type_spec),
                     Some(member_size_type),
                 )
             }
@@ -190,11 +192,13 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     }
                 } else {
                     // Size is a runtime constant, its evaluation needs the limits and can fail.
-                    let type_spec =
-                        self.format_structure_member_plain_type(plain_type, conditional, true);
+                    let mut type_spec = table.name.to_ascii_lowercase();
+                    if conditional {
+                        type_spec += "_wcv";
+                    }
                     writeln!(
                         out,
-                        "let {}_size = match {}::marshalled_size(limits) {{",
+                        "let {}_size = match {}_marshalled_size(limits) {{",
                         dst_name, type_spec
                     )?;
                     let mut iout = out.make_indent();
@@ -601,8 +605,10 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     // handled, runtime constant sizes would require error
                     // handling.
                     assert!(Self::structure_max_size_is_compiletime_const(&table));
-                    let type_spec =
-                        self.format_structure_member_plain_type(plain_type, conditional, true);
+                    let mut type_spec = table.name.to_ascii_lowercase();
+                    if conditional {
+                        type_spec += "_wcv";
+                    }
                     let member_size_type = self.determine_structure_max_size_type(&table).unwrap();
                     assert!(size_type.bits >= member_size_type.bits);
                     let cast_spec = if member_size_type != size_type {
@@ -612,7 +618,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     } else {
                         borrow::Cow::Borrowed("")
                     };
-                    format!("{}::marshalled_max_size(){}", type_spec, cast_spec)
+                    format!("{}_marshalled_max_size(){}", type_spec, cast_spec)
                 }
             }
         }
@@ -651,8 +657,10 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         ),
                     );
                 };
-                let type_spec =
-                    self.format_structure_member_plain_type(plain_type, conditional, true);
+                let mut type_spec = table.name.to_ascii_lowercase();
+                if conditional {
+                    type_spec += "_wcv";
+                }
                 let member_size_type = self.determine_structure_max_size_type(&table).unwrap();
                 assert!(size_type.bits >= member_size_type.bits);
                 let cast_spec = if member_size_type != size_type {
@@ -666,7 +674,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 let max_size_name_spec = if size_is_fixed { "size" } else { "max_size" };
                 writeln!(
                     out,
-                    "let {} = match {}::marshalled_{}(limits) {{",
+                    "let {} = match {}_marshalled_{}(limits) {{",
                     dst_name, type_spec, max_size_name_spec
                 )?;
                 let mut iout = out.make_indent();
@@ -680,7 +688,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         }
     }
 
-    pub(super) fn gen_structure_marshalled_max_size<W: io::Write>(
+    pub(super) fn gen_structure_marshalled_max_size_impl<W: io::Write>(
         &self,
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
         table: &StructureTable,
@@ -691,7 +699,6 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         } else {
             &table.closure_deps_conditional
         };
-        let table_deps = table_closure_deps.collect_config_deps(ClosureDepsFlags::all());
 
         // If the size is fixed, the maximum on the marshalled size equals the
         // fixed size. There is no point in providing a separate helper for the
@@ -706,21 +713,14 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             ClosureDepsFlags::ANY_MAX_SIZE
         };
         let mut max_size_deps = table_closure_deps.collect_config_deps(max_size_deps_flags);
-        max_size_deps.factor_by_common_of(&table_deps);
-        if !max_size_deps.is_implied_by(&table_deps) {
+        if !max_size_deps.is_unconditional_true() {
             writeln!(out, "#[cfg({})]", Self::format_deps(&max_size_deps))?;
         }
 
-        let pub_spec = if (size_is_fixed
-            && table_closure_deps
-                .any(ClosureDepsFlags::EXTERN_MAX_SIZE | ClosureDepsFlags::EXTERN_SIZE))
-            || (!size_is_fixed && table_closure_deps.any(ClosureDepsFlags::EXTERN_MAX_SIZE))
-        {
-            "pub "
-        } else {
-            ""
-        };
-
+        let mut type_spec = table.name.to_ascii_lowercase();
+        if conditional {
+            type_spec += "_wcv";
+        }
         let size_type = self.determine_structure_max_size_type(table).map_err(|_| {
             eprintln!("error: {}: integer overflow in structure size", &table.name);
             io::Error::from(io::ErrorKind::InvalidData)
@@ -730,16 +730,16 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         if max_size_is_compiletime_const {
             writeln!(
                 out,
-                "{}const fn marshalled_{}() -> {} {{",
-                pub_spec,
+                "const fn {}_marshalled_{}() -> {} {{",
+                type_spec,
                 max_size_name,
                 Self::predefined_type_to_rust(size_type)
             )?;
         } else {
             writeln!(
                 out,
-                "{}fn marshalled_{}(limits: &TpmLimits) -> Result<{}, ()> {{",
-                pub_spec,
+                "fn {}_marshalled_{}(limits: &TpmLimits) -> Result<{}, ()> {{",
+                type_spec,
                 max_size_name,
                 Self::predefined_type_to_rust(size_type)
             )?;
@@ -761,7 +761,6 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         for j in 0..table.entries.len() {
             let entry = &table.entries[j];
             let deps = &entry.deps;
-            let deps = deps.factor_by_common_of(&table_deps);
             let deps = deps.factor_by_common_of(&max_size_deps);
             match &entry.entry_type {
                 StructureTableEntryType::Plain(plain_type) => {
@@ -946,7 +945,6 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             let entry = &table.entries[*j];
             writeln!(&mut iout)?;
             let deps = &entry.deps;
-            let deps = deps.factor_by_common_of(&table_deps);
             let deps = deps.factor_by_common_of(&max_size_deps);
             let mut iiout = if !deps.is_unconditional_true() {
                 writeln!(&mut iout, "#[cfg({})]", Self::format_dep_conjunction(&deps))?;
@@ -1091,6 +1089,81 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         }
 
         writeln!(out, "}}")?;
+        Ok(())
+    }
+
+    pub(super) fn gen_structure_marshalled_max_size<W: io::Write>(
+        &self,
+        out: &mut code_writer::IndentedCodeWriter<'_, W>,
+        table: &StructureTable,
+        conditional: bool,
+    ) -> Result<(), io::Error> {
+        let table_closure_deps = if !conditional {
+            &table.closure_deps
+        } else {
+            &table.closure_deps_conditional
+        };
+        let table_deps = table_closure_deps.collect_config_deps(ClosureDepsFlags::all());
+
+        // If the size is fixed, the maximum on the marshalled size equals the
+        // fixed size. There is no point in providing a separate helper for the
+        // maximum possible size, emit only a single one and reflect this fact
+        // in its naming.
+        let (size_is_fixed, fixed_size_is_compiletime_const) =
+            Self::structure_has_fixed_size(table);
+        let max_size_name = if size_is_fixed { "size" } else { "max_size" };
+        let max_size_deps_flags = if size_is_fixed {
+            ClosureDepsFlags::ANY_SIZE | ClosureDepsFlags::EXTERN_MAX_SIZE
+        } else {
+            ClosureDepsFlags::EXTERN_MAX_SIZE
+        };
+        let mut max_size_deps = table_closure_deps.collect_config_deps(max_size_deps_flags);
+        max_size_deps.factor_by_common_of(&table_deps);
+        if !max_size_deps.is_implied_by(&table_deps) {
+            writeln!(out, "#[cfg({})]", Self::format_deps(&max_size_deps))?;
+        }
+
+        let pub_spec = if (size_is_fixed
+            && table_closure_deps
+                .any(ClosureDepsFlags::EXTERN_MAX_SIZE | ClosureDepsFlags::EXTERN_SIZE))
+            || (!size_is_fixed && table_closure_deps.any(ClosureDepsFlags::EXTERN_MAX_SIZE))
+        {
+            "pub "
+        } else {
+            ""
+        };
+
+        let mut type_spec = table.name.to_ascii_lowercase();
+        if conditional {
+            type_spec += "_wcv";
+        }
+        let size_type = self.determine_structure_max_size_type(table).map_err(|_| {
+            eprintln!("error: {}: integer overflow in structure size", &table.name);
+            io::Error::from(io::ErrorKind::InvalidData)
+        })?;
+        let max_size_is_compiletime_const = Self::structure_max_size_is_compiletime_const(table);
+        assert!(!size_is_fixed || fixed_size_is_compiletime_const == max_size_is_compiletime_const);
+        if max_size_is_compiletime_const {
+            writeln!(
+                out,
+                "{}const fn marshalled_{}() -> {} {{",
+                pub_spec,
+                max_size_name,
+                Self::predefined_type_to_rust(size_type)
+            )?;
+            writeln!(out.make_indent(), "{}_marshalled_size()", type_spec)?;
+            writeln!(out, "}}")?;
+        } else {
+            writeln!(
+                out,
+                "{}fn marshalled_{}(limits: &TpmLimits) -> Result<{}, ()> {{",
+                pub_spec,
+                max_size_name,
+                Self::predefined_type_to_rust(size_type)
+            )?;
+            writeln!(out.make_indent(), "{}_marshalled_size(limits)", type_spec)?;
+            writeln!(out, "}}")?;
+        }
         Ok(())
     }
 
@@ -1431,7 +1504,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             // size is fixed and independent of the contents. It might have been
             // emitted in the context of handling the ANY_MAX_SIZE closure
             // dependencies already.
-            if table_closure_deps.any(ClosureDepsFlags::ANY_MAX_SIZE) {
+            if table_closure_deps.any(ClosureDepsFlags::EXTERN_MAX_SIZE) {
                 return Ok(());
             } else {
                 return self.gen_structure_marshalled_max_size(out, table, conditional);

@@ -780,11 +780,17 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         let need_impl = table_closure_deps.any(
             ClosureDepsFlags::ANY_UNMARSHAL_OR_MARSHAL
                 | ClosureDepsFlags::ANY_SIZE
-                | ClosureDepsFlags::ANY_MAX_SIZE,
+                | ClosureDepsFlags::EXTERN_MAX_SIZE,
         );
         let need_impl = need_impl
             || (contains_array && table_closure_deps.any(ClosureDepsFlags::ANY_TRY_CLONE))
             || (references_inbuf && table_closure_deps.any(ClosureDepsFlags::ANY_INTO_BUFS_OWNER));
+
+        // If the size is fixed, the maximum on the marshalled size equals the fixed size and only a
+        // single helper named accordingly will be provided.
+        let need_max_size_impl = table_closure_deps.any(ClosureDepsFlags::ANY_MAX_SIZE)
+            || (table_closure_deps.any(ClosureDepsFlags::ANY_SIZE)
+                && Self::structure_has_fixed_size(table).0);
 
         if !table_deps.is_unconditional_true() {
             writeln!(out, "#[cfg({})]", Self::format_deps(&table_deps))?;
@@ -857,7 +863,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 let mut iout = out.make_indent();
 
                 let mut first = true;
-                if table_closure_deps.any(ClosureDepsFlags::ANY_MAX_SIZE) {
+                if table_closure_deps.any(ClosureDepsFlags::EXTERN_MAX_SIZE) {
                     first = false;
                     self.gen_structure_marshalled_max_size(&mut iout, table, conditional)?;
                 }
@@ -970,58 +976,79 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     }
                 }
                 writeln!(out, "}}")?;
+            }
 
-                if table_closure_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
-                    let discriminant_type = discriminant.resolved_discriminant_type.as_ref().unwrap();
-                    if match discriminant_type {
-                        StructureTableEntryResolvedDiscriminantType::Constants(index) => {
-                            let discriminant_table = self.tables.structures.get_constants(*index);
-                            discriminant_table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION)
-                        },
-                        StructureTableEntryResolvedDiscriminantType::Type(index) => {
-                            let discriminant_table = self.tables.structures.get_type(*index);
-                            let discriminant_enable_conditional =
-                                conditional && discriminant.discriminant_type_conditional
-                                || discriminant.discriminant_type_enable_conditional;
-                            if discriminant_enable_conditional {
-                                discriminant_table.closure_deps_conditional.any(ClosureDepsFlags::ANY_DEFINITION)
-                            } else {
-                                discriminant_table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION)
-                            }
-                        },
-                    } {
-                        writeln!(out)?;
-                        self.gen_tagged_union_to_discriminant(out, table, table_closure_deps,
-                                                              &table_name, discriminant_member,
-                                                              conditional && discriminant.discriminant_type_conditional,
-                                                              enable_enum_transmute)?;
+            if need_max_size_impl {
+                writeln!(out)?;
+                self.gen_structure_marshalled_max_size_impl(out, table, conditional)?;
+            }
+
+            if table_closure_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
+                let discriminant_type =
+                    discriminant.resolved_discriminant_type.as_ref().unwrap();
+                if match discriminant_type {
+                    StructureTableEntryResolvedDiscriminantType::Constants(index) => {
+                        let discriminant_table = self.tables.structures.get_constants(*index);
+                        discriminant_table
+                            .closure_deps
+                            .any(ClosureDepsFlags::ANY_DEFINITION)
                     }
-                }
-
-                if conditional
-                    && table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION)
-                {
-                    assert!(discriminant.discriminant_type_conditional);
-                    // Emit conversion primitives between the conditional and non-conditional
-                    // variants.
+                    StructureTableEntryResolvedDiscriminantType::Type(index) => {
+                        let discriminant_table = self.tables.structures.get_type(*index);
+                        let discriminant_enable_conditional = conditional
+                            && discriminant.discriminant_type_conditional
+                            || discriminant.discriminant_type_enable_conditional;
+                        if discriminant_enable_conditional {
+                            discriminant_table
+                                .closure_deps_conditional
+                                .any(ClosureDepsFlags::ANY_DEFINITION)
+                        } else {
+                            discriminant_table
+                                .closure_deps
+                                .any(ClosureDepsFlags::ANY_DEFINITION)
+                        }
+                    }
+                } {
                     writeln!(out)?;
-                    self.gen_tagged_union_non_cond_cond_conversions(out, table, discriminant_member, false)?;
-                }
-
-                if table_closure_deps.any(ClosureDepsFlags::ANY_UNMARSHAL)
-                    && enable_in_place_unmarshal
-                {
-                    writeln!(out)?;
-                    self.gen_tagged_union_layout_repr_struct(
+                    self.gen_tagged_union_to_discriminant(
                         out,
                         table,
                         table_closure_deps,
                         &table_name,
                         discriminant_member,
-                        conditional,
+                        conditional && discriminant.discriminant_type_conditional,
+                        enable_enum_transmute,
                     )?;
                 }
             }
+
+            if conditional && table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
+                assert!(discriminant.discriminant_type_conditional);
+                // Emit conversion primitives between the conditional and non-conditional
+                // variants.
+                writeln!(out)?;
+                self.gen_tagged_union_non_cond_cond_conversions(
+                    out,
+                    table,
+                    discriminant_member,
+                    false,
+                )?;
+            }
+
+            if table_closure_deps.any(ClosureDepsFlags::ANY_UNMARSHAL)
+                && enable_in_place_unmarshal
+            {
+                writeln!(out)?;
+                self.gen_tagged_union_layout_repr_struct(
+                    out,
+                    table,
+                    table_closure_deps,
+                    &table_name,
+                    discriminant_member,
+                    conditional,
+                )?;
+            }
+
         } else {
             if table_is_public {
                 write!(out, "pub ")?
@@ -1136,7 +1163,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 let mut iout = out.make_indent();
                 let mut first = true;
 
-                if table_closure_deps.any(ClosureDepsFlags::ANY_MAX_SIZE) {
+                if table_closure_deps.any(ClosureDepsFlags::EXTERN_MAX_SIZE) {
                     first = false;
                     self.gen_structure_marshalled_max_size(&mut iout, table, conditional)?;
                 }
@@ -1148,7 +1175,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 // already.
                 let (size_is_fixed, _) = Self::structure_has_fixed_size(table);
                 if table_closure_deps.any(ClosureDepsFlags::ANY_SIZE)
-                    && !(size_is_fixed && table_closure_deps.any(ClosureDepsFlags::ANY_MAX_SIZE))
+                    && !(size_is_fixed && table_closure_deps.any(ClosureDepsFlags::EXTERN_MAX_SIZE))
                 {
                     if !first {
                         writeln!(&mut iout)?;
@@ -1229,6 +1256,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 }
 
                 writeln!(out, "}}")?;
+            }
+
+            if need_max_size_impl {
+                writeln!(out)?;
+                self.gen_structure_marshalled_max_size_impl(out, table, conditional)?;
             }
 
             // Now define all discriminant members' corresponding enum types.

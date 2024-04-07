@@ -406,15 +406,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     let t = self.determine_structure_max_size_type(&table)?;
                     match table.max_size.as_ref().unwrap() {
                         ExprValue::CompiletimeConstant(_) => Ok((
-                            Self::camelize(&table.name) + "::" + max_size_method_name + "()",
+                            table.name.to_ascii_lowercase() + "_" + max_size_method_name + "()",
                             t,
                             true,
                             false,
                         )),
                         ExprValue::RuntimeConstant(_) => Ok((
                             format!(
-                                "{}::{}({})",
-                                Self::camelize(&table.name),
+                                "{}_{}({})",
+                                table.name.to_ascii_lowercase(),
                                 max_size_method_name,
                                 limits_name
                             ),
