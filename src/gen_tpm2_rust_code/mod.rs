@@ -58,7 +58,6 @@ use alloc::vec::Vec;
 use alloc::boxed::Box;
 use core::cmp;
 use core::convert;
-use core::default;
 use core::mem;
 use core::ops;
 use core::ptr;
@@ -111,15 +110,6 @@ impl<'a> ops::Deref for TpmBuffer<'a> {{
 impl<'a> convert::From<&'a [u8]> for TpmBuffer<'a> {{
     fn from(value: &'a [u8]) -> Self {{
         Self::Borrowed(value)
-    }}
-}}
-
-impl<'a> default::Default for TpmBuffer<'a> {{
-    fn default() -> Self {{
-        let o = Vec::new();
-        #[cfg(feature = \"zeroize\")]
-        let o = zeroize::Zeroizing::from(o);
-        Self::Owned(o)
     }}
 }}
 

@@ -332,7 +332,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     };
                                     writeln!(
                                         &mut iiout,
-                                        "self.{} = mem::take(&mut self.{}).into_owned()?;",
+                                        "self.{} = mem::replace(&mut self.{}, TpmBuffer::Owned(Vec::new())).into_owned()?;",
                                         name, name
                                     )?;
                                     if !deps.is_unconditional_true() {
@@ -716,7 +716,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         first = false;
                                         writeln!(
                                             &mut iiiout,
-                                            "*{} = mem::take({}).into_owned()?;",
+                                            "*{} = mem::replace({}, TpmBuffer::Owned(Vec::new())).into_owned()?;",
                                             union_entry_name, union_entry_name
                                         )?;
                                     }
