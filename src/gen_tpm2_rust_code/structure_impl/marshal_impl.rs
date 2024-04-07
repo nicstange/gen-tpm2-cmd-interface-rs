@@ -149,10 +149,9 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         if is_byte_array {
             writeln!(
                 out,
-                "let (produced, {}) = split_slice_at_mut({}, {}.len())?;",
+                "let {} = marshal_bytes({}, &{})?;",
                 outbuf_name, inbuf_name, src_spec
             )?;
-            writeln!(out, "produced.copy_from_slice(&{});", src_spec)?;
         } else {
             writeln!(out, "let mut {} = {};", outbuf_name, inbuf_name)?;
             writeln!(out, "for element in {}.iter() {{", src_spec)?;

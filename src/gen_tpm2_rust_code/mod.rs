@@ -253,6 +253,30 @@ impl<'a, A: Allocator> PartialEq for TpmBuffer<'a, A> {{
             }
         }
 
+        if !enable_panic_free {
+            write!(
+                &mut out,
+                "
+fn marshal_bytes<'a>(buf: &'a mut [u8], src: &[u8]) -> Result<&'a mut [u8], TpmErr> {{
+    let (produced, buf) = split_slice_at_mut(buf, src.len())?;
+    produced.copy_from_slice(src);
+    Ok(buf)
+}}
+"
+            )?;
+        } else {
+            write!(
+                &mut out,
+                "
+fn marshal_bytes<'a>(buf: &'a mut [u8], src: &[u8]) -> Result<&'a mut [u8], TpmErr> {{
+    let (produced, buf) = split_slice_at_mut(buf, src.len())?;
+    unsafe {{ ptr::copy_nonoverlapping(src.as_ptr(), produced.as_mut_ptr(), src.len()) }};
+    Ok(buf)
+}}
+"
+            )?;
+        }
+
         for index in self.tables.structures.iter() {
             match index {
                 StructuresPartTablesIndex::Constants(index) => {
