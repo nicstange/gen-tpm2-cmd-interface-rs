@@ -68,8 +68,19 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     }
                 },
             };
-        let references_inbuf = self.tagged_union_references_inbuf(table, discriminant);
-        let lifetime_decl = if references_inbuf { "<'a>" } else { "" };
+
+        let contains_array = self.tagged_union_contains_array(table, discriminant);
+        let references_inbuf = contains_array && self.tagged_union_references_inbuf(table, discriminant);
+        let gen_params_spec = if contains_array {
+            if references_inbuf
+            {
+                ("<'a, A: Clone + Allocator>", "<'a, A>")
+            } else {
+                ("<A: Clone + Allocator>", "<A>")
+            }
+        } else {
+            ("", "")
+        };
 
         tagged_union_config_deps.factor_by_common_of(&discriminant_config_deps);
         if tagged_union_config_deps.is_implied_by(&discriminant_config_deps) {
@@ -89,9 +100,9 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         }
 
         writeln!(out, "impl{} convert::From<&{}{}> for {} {{",
-                 lifetime_decl, tagged_union_name, lifetime_decl, discriminant_type_name)?;
+                 gen_params_spec.0, tagged_union_name, gen_params_spec.1, discriminant_type_name)?;
         let mut iout = out.make_indent();
-        writeln!(&mut iout, "fn from(value: &{}{}) -> Self {{", tagged_union_name, lifetime_decl)?;
+        writeln!(&mut iout, "fn from(value: &{}{}) -> Self {{", tagged_union_name, gen_params_spec.1)?;
         let mut iiout = iout.make_indent();
         if enable_enum_transmute {
             let discriminant_base =
@@ -106,9 +117,10 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         self.tables.structures.get_type(*i).underlying_type.unwrap()
                     }
                 };
-            writeln!(&mut iiout, "unsafe {{ mem::transmute::<{}, {}>(*(value as * const {} as * const {})) }}",
+            writeln!(&mut iiout, "unsafe {{ mem::transmute::<{}, {}>(*(value as * const {}{} as * const {})) }}",
                      Self::predefined_type_to_rust(discriminant_base), discriminant_type_name,
-                     &tagged_union_name, Self::predefined_type_to_rust(discriminant_base))?;
+                     &tagged_union_name, gen_params_spec.1,
+                     Self::predefined_type_to_rust(discriminant_base))?;
         } else {
             writeln!(&mut iiout, "match value {{")?;
             let mut iiiout = iiout.make_indent();
@@ -222,15 +234,25 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                      Self::format_deps(&config_deps_cond))?;
         }
 
-        let references_inbuf = self.tagged_union_references_inbuf(table, discriminant);
-        let lifetime_decl = if references_inbuf { "<'a>" } else { "" };
+        let contains_array = self.tagged_union_contains_array(table, discriminant);
+        let references_inbuf = contains_array && self.tagged_union_references_inbuf(table, discriminant);
+        let gen_params_spec = if contains_array {
+            if references_inbuf
+            {
+                ("<'a, A: Clone + Allocator>", "<'a, A>")
+            } else {
+                ("<A: Clone + Allocator>", "<A>")
+            }
+        } else {
+            ("", "")
+        };
 
         writeln!(out, "impl{} convert::From<{}{}> for {}{} {{",
-                 lifetime_decl, &tagged_union_name_noncond, lifetime_decl,
-                 tagged_union_name_cond, lifetime_decl)?;
+                 gen_params_spec.0, &tagged_union_name_noncond, gen_params_spec.1,
+                 tagged_union_name_cond, gen_params_spec.1)?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "fn from(value: {}{}) -> Self {{",
-                 &tagged_union_name_noncond, lifetime_decl)?;
+                 &tagged_union_name_noncond, gen_params_spec.1)?;
         let mut iiout = iout.make_indent();
         writeln!(&mut iiout, "match value {{")?;
         let mut iiiout = iiout.make_indent();
@@ -308,13 +330,13 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                      Self::format_deps(&config_deps_cond))?;
         }
         writeln!(out, "impl{} convert::TryFrom<{}{}> for {}{} {{",
-                 lifetime_decl, &tagged_union_name_cond, lifetime_decl,
-                 tagged_union_name_noncond, lifetime_decl)?;
+                 gen_params_spec.0, &tagged_union_name_cond, gen_params_spec.1,
+                 tagged_union_name_noncond, gen_params_spec.1)?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "type Error = TpmErr;")?;
         writeln!(&mut iout)?;
         writeln!(&mut iout, "fn try_from(value: {}{}) -> Result<Self, TpmErr> {{",
-                 &tagged_union_name_cond, lifetime_decl)?;
+                 &tagged_union_name_cond, gen_params_spec.1)?;
         let mut iiout = iout.make_indent();
         writeln!(&mut iiout, "let result = match value {{")?;
         let mut iiiout = iiout.make_indent();
@@ -413,11 +435,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                      Self::format_deps(&config_deps_cond))?;
         }
         writeln!(out, "impl{} cmp::PartialEq<{}{}> for {}{} {{",
-                 lifetime_decl, &tagged_union_name_noncond, lifetime_decl,
-                 tagged_union_name_cond, lifetime_decl)?;
+                 gen_params_spec.0, &tagged_union_name_noncond, gen_params_spec.1,
+                 tagged_union_name_cond, gen_params_spec.1)?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "fn eq(&self, other: &{}{}) -> bool {{",
-                 &tagged_union_name_noncond, lifetime_decl)?;
+                 &tagged_union_name_noncond, gen_params_spec.1)?;
         let mut iiout = iout.make_indent();
         writeln!(&mut iiout, "match self {{")?;
         let mut iiiout = iiout.make_indent();
@@ -532,11 +554,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                      Self::format_deps(&config_deps_cond))?;
         }
         writeln!(out, "impl{} cmp::PartialEq<{}{}> for {}{} {{",
-                 lifetime_decl, &tagged_union_name_cond, lifetime_decl,
-                 tagged_union_name_noncond, lifetime_decl)?;
+                 gen_params_spec.0, &tagged_union_name_cond, gen_params_spec.1,
+                 tagged_union_name_noncond, gen_params_spec.1)?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "fn eq(&self, other: &{}{}) -> bool {{",
-                 &tagged_union_name_cond, lifetime_decl)?;
+                 &tagged_union_name_cond, gen_params_spec.1)?;
         writeln!(&mut iout.make_indent(), "other.eq(self)")?;
         writeln!(&mut iout, "}}")?;
         writeln!(out, "}}")?;

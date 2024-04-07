@@ -383,16 +383,16 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         if let StructureTableEntryResolvedBaseType::Predefined(predefined) = element_type {
             if predefined.bits == 8 && !predefined.signed {
                 if !use_anon_liftime {
-                    return "TpmBuffer<'a>".to_owned();
+                    return "TpmBuffer<'a, A>".to_owned();
                 } else {
-                    return "TpmBuffer::<'_>".to_owned();
+                    return "TpmBuffer::<'_, A>".to_owned();
                 }
             }
         }
 
         "Vec<".to_owned()
             + &self.format_structure_member_plain_type(element_type, conditional, use_anon_liftime)
-            + ">"
+            + ", A>"
     }
 
     pub(in super::super) fn format_structure_member_plain_type(
@@ -434,13 +434,21 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     (borrow::Cow::Borrowed(&table.name), &table.closure_deps)
                 };
                 let mut name = Self::camelize(&name);
-                if self.structure_references_inbuf(&table)
-                    && table_closure_deps.any(ClosureDepsFlags::ANY_DEFINITION)
+                if table_closure_deps.any(ClosureDepsFlags::ANY_DEFINITION)
+                    && self.structure_contains_array(&table)
                 {
-                    if !use_anon_liftime {
-                        name += "<'a>";
+                    if self.structure_references_inbuf(&table) {
+                        if !use_anon_liftime {
+                            name += "<'a, A>";
+                        } else {
+                            name += "::<'_, A>";
+                        }
                     } else {
-                        name += "::<'_>";
+                        if !use_anon_liftime {
+                            name += "<A>";
+                        } else {
+                            name += "::<A>";
+                        }
                     }
                 }
                 borrow::Cow::Owned(name)
@@ -969,12 +977,20 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 write!(out, "pub ")?
             }
 
-            let lifetime_spec = if references_inbuf { "<'a>" } else { "" };
+            let gen_params_spec = if contains_array {
+                if references_inbuf {
+                    ("<'a, A: Clone + Allocator>", "<'a, A>")
+                } else {
+                    ("<A: Clone + Allocator>", "<A>")
+                }
+            } else {
+                ("", "")
+            };
             writeln!(
                 out,
                 "enum {}{} {{",
                 Self::camelize(&table_name),
-                lifetime_spec
+                gen_params_spec.0
             )?;
             self.gen_tagged_union_def(
                 &mut out.make_indent(),
@@ -994,9 +1010,9 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 writeln!(
                     out,
                     "impl{} {}{} {{",
-                    lifetime_spec,
+                    gen_params_spec.0,
                     Self::camelize(&table_name),
-                    lifetime_spec
+                    gen_params_spec.1
                 )?;
                 let mut iout = out.make_indent();
 
@@ -1192,13 +1208,21 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 write!(out, "pub ")?
             }
 
-            let lifetime_spec = if references_inbuf { "<'a>" } else { "" };
+            let gen_params_spec = if need_definition && contains_array {
+                if references_inbuf {
+                    ("<'a, A: Clone + Allocator>", "<'a, A>")
+                } else {
+                    ("<A: Clone + Allocator>", "<A>")
+                }
+            } else {
+                ("", "")
+            };
 
             writeln!(
                 out,
                 "struct {}{} {{",
                 Self::camelize(&table_name),
-                lifetime_spec
+                gen_params_spec.0
             )?;
             let mut iout = out.make_indent();
             let pub_spec = if definition_is_public { "pub " } else { "" };
@@ -1256,13 +1280,20 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 entry,
                             );
                             let type_spec = Self::camelize(&type_spec);
-                            let references_inbuf =
-                                self.tagged_union_references_inbuf(table, discriminant);
-                            let lifetime_spec = if references_inbuf { "<'a>" } else { "" };
+                            let gen_params_spec =
+                                if self.tagged_union_contains_array(table, discriminant) {
+                                    if self.tagged_union_references_inbuf(table, discriminant) {
+                                        "<'a, A>"
+                                    } else {
+                                        "<A>"
+                                    }
+                                } else {
+                                    ""
+                                };
                             writeln!(
                                 &mut iout,
                                 "{}{}: {}{},",
-                                pub_spec, name, type_spec, lifetime_spec
+                                pub_spec, name, type_spec, gen_params_spec
                             )?;
                         }
                         StructureTableEntryType::Array(array_type) => {
@@ -1294,9 +1325,9 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 writeln!(
                     out,
                     "impl{} {}{} {{",
-                    lifetime_spec,
+                    gen_params_spec.0,
                     Self::camelize(&table_name),
-                    lifetime_spec
+                    gen_params_spec.1
                 )?;
                 let mut iout = out.make_indent();
                 let mut first = true;
@@ -1469,7 +1500,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 let type_spec = Self::camelize(&type_name);
                 let contains_array = self.tagged_union_contains_array(table, discriminant);
                 let references_inbuf = self.tagged_union_references_inbuf(table, discriminant);
-                let lifetime_spec = if references_inbuf { "<'a>" } else { "" };
+                let gen_params_spec = if self.tagged_union_contains_array(table, discriminant) {
+                    if self.tagged_union_references_inbuf(table, discriminant) {
+                        ("<'a, A: Clone + Allocator>", "<'a, A>")
+                    } else {
+                        ("<A: Clone + Allocator>", "<A>")
+                    }
+                } else {
+                    ("", "")
+                };
 
                 if !contains_array {
                     assert!(!references_inbuf);
@@ -1486,7 +1525,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     Self::predefined_type_to_rust(discriminant_base)
                 )?;
                 let pub_spec = if make_public { "pub " } else { "" };
-                writeln!(out, "{}enum {}{} {{", pub_spec, type_spec, lifetime_spec)?;
+                writeln!(
+                    out,
+                    "{}enum {}{} {{",
+                    pub_spec, type_spec, gen_params_spec.0
+                )?;
                 self.gen_tagged_union_def(
                     &mut out.make_indent(),
                     table,
@@ -1509,7 +1552,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     writeln!(
                         out,
                         "impl{} {}{} {{",
-                        lifetime_spec, type_spec, lifetime_spec
+                        gen_params_spec.0, type_spec, gen_params_spec.1
                     )?;
                     let mut first = true;
                     let mut iout = out.make_indent();

@@ -328,27 +328,35 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     ""
                 };
 
+                let allocator_arg = if self.structure_contains_nonbyte_array(&table) {
+                    ", alloc"
+                } else {
+                    ""
+                };
+
                 if let Some(dst_spec) = dst_spec {
                     writeln!(
                         out,
-                        "let {} = match {}::unmarshal_intern({}, {}{}{}) {{",
+                        "let {} = match {}::unmarshal_intern({}, {}{}{}{}) {{",
                         outbuf_name,
                         type_spec,
                         dst_spec,
                         decrypted_head_buf_arg,
                         inbuf_name,
-                        limits_arg
+                        limits_arg,
+                        allocator_arg,
                     )?;
                 } else {
                     writeln!(
                         out,
-                        "let ({}, unmarshalled_{}) = match {}::unmarshal_intern({}{}{}) {{",
+                        "let ({}, unmarshalled_{}) = match {}::unmarshal_intern({}{}{}{}) {{",
                         outbuf_name,
                         &member_name,
                         type_spec,
                         decrypted_head_buf_arg,
                         inbuf_name,
-                        limits_arg
+                        limits_arg,
+                        allocator_arg,
                     )?;
                 }
                 let mut iout = out.make_indent();
@@ -850,7 +858,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             let elements_need_drop = self.structure_plain_member_needs_drop(element_type);
             writeln!(
                 out,
-                "let mut unmarshalled_{}: Vec<{}> = Vec::new();",
+                "let mut unmarshalled_{}: Vec<{}, A> = Vec::new_in(alloc.clone());",
                 member_name, type_spec
             )?;
             writeln!(
@@ -1094,6 +1102,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
         let references_inbuf = self.structure_references_inbuf(table);
         let lifetime_decl = if !references_inbuf { "<'a>" } else { "" };
+        let allocator_arg = if self.structure_contains_nonbyte_array(table) {
+            ", alloc: &A"
+        } else {
+            ""
+        };
 
         let need_limits = self.structure_unmarshal_needs_limits(table);
         let limits_arg = if need_limits {
@@ -1114,16 +1127,22 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
         if enable_in_place_unmarshal {
             writeln!(out,
-                     "fn unmarshal_intern{}(dst: *mut Self, {}{}{}) -> Result<&'a [u8], TpmErr> {{",
-                     lifetime_decl, decrypted_head_buf_arg_decl, unencrypted_tail_buf_arg_decl, limits_arg)?;
+                     "fn unmarshal_intern{}(dst: *mut Self, {}{}{}{}) -> Result<&'a [u8], TpmErr> {{",
+                     lifetime_decl,
+                     decrypted_head_buf_arg_decl,
+                     unencrypted_tail_buf_arg_decl,
+                     limits_arg,
+                     allocator_arg
+            )?;
         } else {
             writeln!(
                 out,
-                "fn unmarshal_intern{}({}{}{}) -> Result<(&'a [u8], Self), TpmErr> {{",
+                "fn unmarshal_intern{}({}{}{}{}) -> Result<(&'a [u8], Self), TpmErr> {{",
                 lifetime_decl,
                 decrypted_head_buf_arg_decl,
                 unencrypted_tail_buf_arg_decl,
-                limits_arg
+                limits_arg,
+                allocator_arg
             )?;
         }
 
@@ -1383,12 +1402,19 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     );
                     let type_spec = Self::camelize(&type_spec);
 
-                    let references_inbuf = self.tagged_union_references_inbuf(table, discriminant);
-                    let lifetime_spec = if references_inbuf { "::<'_>" } else { "" };
+                    let gen_params_spec = if self.tagged_union_contains_array(table, discriminant) {
+                        if self.tagged_union_references_inbuf(table, discriminant) {
+                            "::<'_, A>"
+                        } else {
+                            "::<A>"
+                        }
+                    } else {
+                        ""
+                    };
 
                     writeln!(&mut iout,
                              "let (buf, unmarshalled_{}) = match {}{}::unmarshal_intern_selector(buf) {{",
-                             &selector_name, &type_spec, &lifetime_spec)?;
+                             &selector_name, &type_spec, &gen_params_spec)?;
 
                     let mut iiout = iout.make_indent();
                     writeln!(&mut iiout, "Ok(r) => r,")?;
@@ -1469,8 +1495,21 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     );
                     let type_spec = Self::camelize(&type_spec);
 
-                    let references_inbuf = self.tagged_union_references_inbuf(table, discriminant);
-                    let lifetime_spec = if references_inbuf { "::<'_>" } else { "" };
+                    let contains_array = self.tagged_union_contains_array(table, discriminant);
+                    let gen_params_spec = if contains_array {
+                        if self.tagged_union_references_inbuf(table, discriminant) {
+                            "::<'_, _>"
+                        } else {
+                            "::<_>"
+                        }
+                    } else {
+                        ""
+                    };
+                    let allocator_arg = if self.tagged_union_contains_nonbyte_array(table, discriminant) {
+                        ", alloc"
+                    } else {
+                        ""
+                    };
 
                     let needs_limits =
                         self.tagged_union_unmarshal_needs_limits(table, discriminant);
@@ -1481,13 +1520,25 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             format!("unsafe{{ptr::addr_of_mut!((*dst).{})}}", &member_name);
                         writeln!(
                             &mut iout,
-                            "let buf = match {}{}::unmarshal_intern({}, unmarshalled_{}, buf{}) {{",
-                            type_spec, lifetime_spec, dst_spec, &selector_name, limits_arg
+                            "let buf = match {}{}::unmarshal_intern({}, unmarshalled_{}, buf{}{}) {{",
+                            type_spec,
+                            gen_params_spec,
+                            dst_spec,
+                            &selector_name,
+                            limits_arg,
+                            allocator_arg
                         )?;
                     } else {
-                        writeln!(&mut iout,
-                                 "let (buf, unmarshalled_{}) = match {}{}::unmarshal_intern(unmarshalled_{}, buf{}) {{",
-                                 &member_name, type_spec, lifetime_spec, &selector_name, limits_arg)?;
+                        writeln!(
+                            &mut iout,
+                            "let (buf, unmarshalled_{}) = match {}{}::unmarshal_intern(unmarshalled_{}, buf{}{}) {{",
+                            &member_name,
+                            type_spec,
+                            gen_params_spec,
+                            &selector_name,
+                            limits_arg,
+                            allocator_arg
+                        )?;
                         members.push(member_name);
                     }
                     let mut iiout = iout.make_indent();
@@ -1572,13 +1623,19 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             let name = Self::camelize(&name);
             let type_spec = tagged_union_repr_name.to_owned() + "_" + &name;
             let mut type_spec = Self::camelize(&type_spec);
-            let references_inbuf =
-                self.tagged_union_member_references_inbuf(table, discriminant, selector.name());
-            if references_inbuf {
-                if !use_anon_lifetime {
-                    type_spec += "<'a>"
+            if self.tagged_union_member_contains_array(table, discriminant, selector.name()) {
+                if self.tagged_union_member_references_inbuf(table, discriminant, selector.name()) {
+                    if !use_anon_lifetime {
+                        type_spec += "<'a, A>"
+                    } else {
+                        type_spec += "::<'_, A>"
+                    }
                 } else {
-                    type_spec += "::<'_>"
+                    if !use_anon_lifetime {
+                        type_spec += "<A>"
+                    } else {
+                        type_spec += "::<A>"
+                    }
                 }
             }
             type_spec
@@ -1610,8 +1667,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             }
         };
 
-        let references_inbuf = self.tagged_union_references_inbuf(table, discriminant);
-        let lifetime_spec = if references_inbuf { "<'a>" } else { "" };
+        let gen_params_spec = if self.tagged_union_contains_array(table, discriminant) {
+            if self.tagged_union_references_inbuf(table, discriminant) {
+                ("<'a, A: Clone + Allocator>", "<'a, A>")
+            } else {
+                ("<A: Clone + Allocator>", "<A>")
+            }
+        } else {
+            ("", "")
+        };
 
         let tagged_union_name = tagged_union_name.to_owned() + "_LAYOUT_REPR";
         let tagged_union_content_union_name = tagged_union_name.clone() + "_UNION";
@@ -1626,7 +1690,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             out,
             "struct {}{} {{",
             Self::camelize(&tagged_union_name),
-            lifetime_spec
+            gen_params_spec.0
         )?;
         let mut iout = out.make_indent();
         writeln!(
@@ -1638,7 +1702,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             &mut iout,
             "u: {}{},",
             Self::camelize(&tagged_union_content_union_name),
-            lifetime_spec
+            gen_params_spec.1
         )?;
         writeln!(out, "}}")?;
 
@@ -1651,7 +1715,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             out,
             "union {}{} {{",
             Self::camelize(&tagged_union_content_union_name),
-            lifetime_spec
+            gen_params_spec.0
         )?;
         let mut iout = out.make_indent();
         for selector in UnionSelectorIterator::new(
@@ -1721,15 +1785,21 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     writeln!(out, "#[derive(Debug)]")?;
                 }
 
-                let references_inbuf =
-                    self.tagged_union_member_references_inbuf(table, discriminant, selector.name());
-                let lifetime_spec = if references_inbuf { "<'a>" } else { "" };
+                let gen_params_spec = if self.tagged_union_member_contains_array(table, discriminant, selector.name()) {
+                    if self.tagged_union_member_references_inbuf(table, discriminant, selector.name()) {
+                        "<'a, A: Clone + Allocator>"
+                    } else {
+                        "<A: Clone + Allocator>"
+                    }
+                } else {
+                    ""
+                };
 
                 let name = self.format_tagged_union_member_name(&selector);
                 let name = tagged_union_name.clone() + "_" + &name;
                 let name = Self::camelize(&name);
                 writeln!(out, "#[repr(C)]")?;
-                writeln!(out, "struct {}{} {{", &name, lifetime_spec)?;
+                writeln!(out, "struct {}{} {{", &name, gen_params_spec)?;
                 let mut iout = out.make_indent();
                 for u in discriminant.discriminated_union_members.iter() {
                     let u = &table.entries[*u];
@@ -1803,7 +1873,8 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         let mut unmarshal_deps = closure_deps.collect_config_deps(ClosureDepsFlags::ANY_UNMARSHAL);
         unmarshal_deps.factor_by_common_of(table_deps);
 
-        let references_inbuf = self.tagged_union_references_inbuf(table, discriminant);
+        let contains_array = self.tagged_union_contains_array(table, discriminant);
+        let references_inbuf = contains_array && self.tagged_union_references_inbuf(table, discriminant);
         let lifetime_decl = if !references_inbuf { "<'a>" } else { "" };
 
         let (discriminant_base, error_rc_value) =
@@ -1876,6 +1947,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             ""
         };
 
+        let allocator_arg = if self.tagged_union_contains_nonbyte_array(table, discriminant) {
+            ", alloc: &A"
+        } else {
+            ""
+        };
+
         if !unmarshal_deps.is_implied_by(table_deps) {
             writeln!(out, "#[cfg({})]", Self::format_deps(&unmarshal_deps))?;
         }
@@ -1887,21 +1964,21 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         if enable_in_place_unmarshal {
             if is_structure_member_repr {
                 writeln!(out,
-                         "fn unmarshal_intern{}(dst: *mut Self, selector: {}, buf: &'a [u8]{}) -> Result<&'a [u8], TpmErr> {{",
-                         lifetime_decl, Self::predefined_type_to_rust(discriminant_base), limits_arg)?;
+                         "fn unmarshal_intern{}(dst: *mut Self, selector: {}, buf: &'a [u8]{}{}) -> Result<&'a [u8], TpmErr> {{",
+                         lifetime_decl, Self::predefined_type_to_rust(discriminant_base), limits_arg, allocator_arg)?;
             } else {
                 writeln!(out,
-                         "fn unmarshal_intern{}(dst: *mut Self, buf: &'a [u8]{}) -> Result<&'a [u8], TpmErr> {{",
-                         lifetime_decl, limits_arg)?;
+                         "fn unmarshal_intern{}(dst: *mut Self, buf: &'a [u8]{}{}) -> Result<&'a [u8], TpmErr> {{",
+                         lifetime_decl, limits_arg, allocator_arg)?;
             }
         } else if is_structure_member_repr {
             writeln!(out,
-                     "fn unmarshal_intern{}(selector: {}, buf: &'a [u8]{}) -> Result<(&'a [u8], Self), TpmErr> {{",
-                     lifetime_decl, Self::predefined_type_to_rust(discriminant_base), limits_arg)?;
+                     "fn unmarshal_intern{}(selector: {}, buf: &'a [u8]{}{}) -> Result<(&'a [u8], Self), TpmErr> {{",
+                     lifetime_decl, Self::predefined_type_to_rust(discriminant_base), limits_arg, allocator_arg)?;
         } else {
             writeln!(out,
-                     "fn unmarshal_intern{}(buf: &'a [u8]{}) -> Result<(&'a [u8], Self), TpmErr> {{",
-                     lifetime_decl, limits_arg)?;
+                     "fn unmarshal_intern{}(buf: &'a [u8]{}{}) -> Result<(&'a [u8], Self), TpmErr> {{",
+                     lifetime_decl, limits_arg, allocator_arg)?;
         }
 
         let mut iout = out.make_indent();
@@ -2053,10 +2130,16 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
         let tagged_union_repr_name = if enable_in_place_unmarshal {
             let tagged_union_repr_name = tagged_union_name.to_owned() + "_LAYOUT_REPR";
+            let gen_params_spec = if contains_array {
+                "<'a, A>"
+            } else {
+                ""
+            };
             writeln!(
                 &mut iout,
-                "let dst = dst as *mut {};",
-                Self::camelize(&tagged_union_repr_name)
+                "let dst = dst as *mut {}{};",
+                Self::camelize(&tagged_union_repr_name),
+                gen_params_spec,
             )?;
             writeln!(
                 &mut iout,
@@ -2380,14 +2463,26 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             writeln!(out, "#[cfg({})]", Self::format_deps(&unmarshal_deps))?;
         }
 
-        let references_inbuf = self.structure_references_inbuf(table);
-        let lifetime_decl = if !references_inbuf { "<'a>" } else { "" };
+        let contains_array = self.structure_contains_array(table);
+        let references_inbuf = contains_array && self.structure_references_inbuf(table);
+        let gen_params_spec = if !contains_array {
+            "<'a, A: Clone + Allocator>"
+        } else if !references_inbuf {
+            "<'a>"
+        } else {
+            ""
+        };
+        let allocator_arg = if self.structure_contains_nonbyte_array(table) {
+            ", alloc"
+        } else {
+            ""
+        };
 
         let need_limits = self.structure_unmarshal_needs_limits(table);
         let limits_arg = if need_limits {
-            ", limits: &TpmLimits"
+            (", limits: &TpmLimits", ", limits")
         } else {
-            ""
+            ("", "")
         };
 
         let is_cryptable = self.structure_is_cryptable(table);
@@ -2409,8 +2504,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
         writeln!(
             out,
-            "pub fn unmarshal{}({}{}{}) -> Result<(&'a [u8], Box<Self>), TpmErr> {{",
-            lifetime_decl, decrypted_head_buf_arg_decl, unencrypted_tail_buf_arg_decl, limits_arg
+            "pub fn unmarshal{}({}{}{}, alloc: &A) -> Result<(&'a [u8], Box<Self, A>), TpmErr> {{",
+            gen_params_spec,
+            decrypted_head_buf_arg_decl,
+            unencrypted_tail_buf_arg_decl,
+            limits_arg.0,
         )?;
 
         let mut iout = out.make_indent();
@@ -2420,11 +2518,10 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             .lookup_constant("TPM_RC_MEMORY")
             .unwrap();
 
-        let limits_arg = if need_limits { ", limits" } else { "" };
         if enable_in_place_unmarshal {
             writeln!(
                 &mut iout,
-                "let mut unmarshalled_uninit = match Box::<Self>::try_new_uninit() {{"
+                "let mut unmarshalled_uninit = match Box::<Self, A>::try_new_uninit_in(alloc.clone()) {{"
             )?;
             let mut iiout = iout.make_indent();
             writeln!(
@@ -2439,22 +2536,22 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             writeln!(&mut iout)?;
             writeln!(
                 &mut iout,
-                "let buf = Self::unmarshal_intern(unmarshalled_uninit.as_mut_ptr(), {}{}{})?;",
-                decrypted_head_buf_arg, unenctryped_tail_buf, limits_arg
+                "let buf = Self::unmarshal_intern(unmarshalled_uninit.as_mut_ptr(), {}{}{}{})?;",
+                decrypted_head_buf_arg, unenctryped_tail_buf, limits_arg.1, allocator_arg
             )?;
             writeln!(
                 &mut iout,
-                "let unmarshalled: Box<Self> = unsafe{{unmarshalled_uninit.assume_init()}};"
+                "let unmarshalled: Box<Self, A> = unsafe{{unmarshalled_uninit.assume_init()}};"
             )?;
         } else {
             writeln!(
                 &mut iout,
-                "let (buf, unmarshalled) = Self::unmarshal_intern({}{}{})?;",
-                decrypted_head_buf_arg, unenctryped_tail_buf, limits_arg
+                "let (buf, unmarshalled) = Self::unmarshal_intern({}{}{}{})?;",
+                decrypted_head_buf_arg, unenctryped_tail_buf, limits_arg.1, allocator_arg
             )?;
             writeln!(
                 &mut iout,
-                "let unmarshalled: Box<Self> = match Box::<Self>::try_new(unmarshalled) {{"
+                "let unmarshalled: Box<Self, A> = match Box::<Self, A>::try_new_in(unmarshalled, alloc.clone()) {{"
             )?;
             let mut iiout = iout.make_indent();
             writeln!(&mut iiout, "Ok(unmarshalled) => unmarshalled,")?;

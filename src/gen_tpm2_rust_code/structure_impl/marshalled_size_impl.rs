@@ -1243,14 +1243,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             entry,
                         );
                         let type_spec = Self::camelize(&type_spec);
-
-                        let references_inbuf =
-                            self.tagged_union_references_inbuf(table, discriminant);
-                        let type_spec = if references_inbuf {
-                            type_spec + "::<'_>"
-                        } else {
-                            type_spec
-                        };
+                        let type_spec =
+                            if self.tagged_union_contains_array(table, discriminant) {
+                                type_spec + "::<'_, A>"
+                            } else {
+                                type_spec
+                            };
 
                         let member_name =
                             Self::format_structure_member_name(&entry.name).into_owned() + "_";

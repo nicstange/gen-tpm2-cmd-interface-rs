@@ -54,7 +54,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             let table_name = Self::camelize(&Self::format_structure_name(table, conditional));
             writeln!(
                 out,
-                "fn into_bufs_owner_intern(self) -> Result<{}<'static>, TpmErr> {{",
+                "fn into_bufs_owner_intern(self, alloc: &A) -> Result<{}<'static, A>, TpmErr> {{",
                 table_name
             )?;
             let mut iout = out.make_indent();
@@ -128,7 +128,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         };
                         writeln!(
                             &mut iiout,
-                            "let {} = {}.into_bufs_owner_intern()?;",
+                            "let {} = {}.into_bufs_owner_intern(alloc)?;",
                             name, name
                         )?;
                         if !deps.is_unconditional_true() {
@@ -151,7 +151,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     } else {
                                         iout.make_same_indent()
                                     };
-                                    writeln!(&mut iiout, "let {} = {}.into_owned()?;", name, name)?;
+                                    writeln!(&mut iiout, "let {} = {}.into_owned(alloc.clone())?;", name, name)?;
                                     if !deps.is_unconditional_true() {
                                         writeln!(&mut iout, "}}")?;
                                     }
@@ -174,7 +174,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         iout.make_same_indent()
                                     };
                                     writeln!(&mut iiout, "let mut {}_orig = {};", name, name)?;
-                                    writeln!(&mut iiout, "let mut {} = Vec::new();", name)?;
+                                    writeln!(&mut iiout, "let mut {} = Vec::new_in(alloc.clone());", name)?;
                                     writeln!(
                                         &mut iiout,
                                         "{}.try_reserve_exact({}_orig.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;",
@@ -187,7 +187,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     )?;
                                     writeln!(
                                         &mut iiout.make_indent(),
-                                        "{}.push(element.into_bufs_owner_intern()?);",
+                                        "{}.push(element.into_bufs_owner_intern(alloc)?);",
                                         name
                                     )?;
                                     writeln!(&mut iiout, "}}")?;
@@ -224,7 +224,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         };
                         writeln!(
                             &mut iiout,
-                            "let {} = {}.into_bufs_owner_intern()?;",
+                            "let {} = {}.into_bufs_owner_intern(alloc)?;",
                             name, name
                         )?;
                         if !deps.is_unconditional_true() {
@@ -285,7 +285,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         } else {
             writeln!(
                 out,
-                "fn into_bufs_owner_intern(&mut self) -> Result<(), TpmErr> {{"
+                "fn into_bufs_owner_intern(&mut self, alloc: &A) -> Result<(), TpmErr> {{"
             )?;
             // Own all buffers in-place, self with limited lifetime 'a will subsequently get
             // transmuted to 'static lifetime.
@@ -309,7 +309,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         } else {
                             iout.make_same_indent()
                         };
-                        writeln!(&mut iiout, "self.{}.into_bufs_owner_intern()?;", name)?;
+                        writeln!(&mut iiout, "self.{}.into_bufs_owner_intern(alloc)?;", name)?;
                         if !deps.is_unconditional_true() {
                             writeln!(&mut iout, "}}")?;
                         }
@@ -332,7 +332,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     };
                                     writeln!(
                                         &mut iiout,
-                                        "self.{} = mem::replace(&mut self.{}, TpmBuffer::Owned(Vec::new())).into_owned()?;",
+                                        "self.{} = mem::replace(&mut self.{}, TpmBuffer::Owned(Vec::new_in(alloc.clone()))).into_owned(alloc.clone())?;",
                                         name, name
                                     )?;
                                     if !deps.is_unconditional_true() {
@@ -363,7 +363,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     )?;
                                     writeln!(
                                         &mut iiout.make_indent(),
-                                        "element.into_bufs_owner_intern()?;"
+                                        "element.into_bufs_owner_intern(alloc)?;"
                                     )?;
                                     writeln!(&mut iiout, "}}")?;
                                     if !deps.is_unconditional_true() {
@@ -397,7 +397,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         } else {
                             iout.make_same_indent()
                         };
-                        writeln!(&mut iiout, "self.{}.into_bufs_owner_intern()?;", name)?;
+                        writeln!(&mut iiout, "self.{}.into_bufs_owner_intern(alloc)?;", name)?;
                         if !deps.is_unconditional_true() {
                             writeln!(&mut iout, "}}")?;
                         }
@@ -449,7 +449,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         if !enable_in_place_into_bufs_owner {
             writeln!(
                 out,
-                "fn into_bufs_owner_intern(self) -> Result<{}<'static>, TpmErr> {{",
+                "fn into_bufs_owner_intern(self, alloc: &A) -> Result<{}<'static, A>, TpmErr> {{",
                 tagged_union_name
             )?;
             let mut iout = out.make_indent();
@@ -521,7 +521,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 first = false;
                                 writeln!(
                                     &mut iiiout,
-                                    "let {} = {}.into_bufs_owner_intern()?;",
+                                    "let {} = {}.into_bufs_owner_intern(alloc)?;",
                                     union_entry_name, union_entry_name
                                 )?;
                             }
@@ -537,7 +537,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         first = false;
                                         writeln!(
                                             &mut iiiout,
-                                            "let {} = {}.into_owned()?;",
+                                            "let {} = {}.into_owned(alloc.clone())?;",
                                             union_entry_name, union_entry_name
                                         )?;
                                     }
@@ -555,7 +555,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         )?;
                                         writeln!(
                                             &mut iiiout,
-                                            "let mut {} = Vec::new();",
+                                            "let mut {} = Vec::new_in(alloc.clone());",
                                             union_entry_name
                                         )?;
                                         writeln!(
@@ -570,7 +570,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         )?;
                                         writeln!(
                                             &mut iiiout.make_indent(),
-                                            "{}.push(element.into_bufs_owner_intern()?);",
+                                            "{}.push(element.into_bufs_owner_intern(alloc)?);",
                                             union_entry_name
                                         )?;
                                         writeln!(&mut iiiout, "}}")?;
@@ -601,7 +601,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         } else {
             writeln!(
                 out,
-                "fn into_bufs_owner_intern(&mut self) -> Result<(), TpmErr> {{"
+                "fn into_bufs_owner_intern(&mut self, alloc: &A) -> Result<(), TpmErr> {{"
             )?;
             let mut iout = out.make_indent();
             writeln!(&mut iout, "match self {{")?;
@@ -700,7 +700,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 first = false;
                                 writeln!(
                                     &mut iiiout,
-                                    "{}.into_bufs_owner_intern()?;",
+                                    "{}.into_bufs_owner_intern(alloc)?;",
                                     union_entry_name
                                 )?;
                             }
@@ -716,7 +716,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         first = false;
                                         writeln!(
                                             &mut iiiout,
-                                            "*{} = mem::replace({}, TpmBuffer::Owned(Vec::new())).into_owned()?;",
+                                            "*{} = mem::replace({}, TpmBuffer::Owned(Vec::new_in(alloc.clone()))).into_owned(alloc.clone())?;",
                                             union_entry_name, union_entry_name
                                         )?;
                                     }
@@ -734,7 +734,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         )?;
                                         writeln!(
                                             &mut iiiout.make_indent(),
-                                            "element.into_bufs_owner_intern()?;"
+                                            "element.into_bufs_owner_intern(alloc)?;"
                                         )?;
                                         writeln!(&mut iiiout, "}}")?;
                                     }
@@ -785,43 +785,43 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             if !self_is_boxed {
                 writeln!(
                     out,
-                    "pub fn into_bufs_owner(this: Self) -> Result<{}<'static>, TpmErr> {{",
+                    "pub fn into_bufs_owner(this: Self, alloc: &A) -> Result<{}<'static, A>, TpmErr> {{",
                     table_name
                 )?;
                 let mut iout = out.make_indent();
-                writeln!(&mut iout, "this.into_bufs_owner_intern()")?;
+                writeln!(&mut iout, "this.into_bufs_owner_intern(alloc)")?;
                 writeln!(out, "}}")?;
             } else {
-                writeln!(out, "pub fn into_bufs_owner(this: Box<Self>) -> Result<Box<{}<'static>>, TpmErr> {{",
+                writeln!(out, "pub fn into_bufs_owner(this: Box<Self, A>, alloc: &A) -> Result<Box<{}<'static, A>, A>, TpmErr> {{",
                          table_name)?;
                 let mut iout = out.make_indent();
                 writeln!(&mut iout, "let this = Box::into_inner(this);")?;
                 writeln!(&mut iout,
-                         "Ok(Box::try_new(this.into_bufs_owner_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)")?;
+                         "Ok(Box::try_new_in(this.into_bufs_owner_intern(alloc)?, alloc.clone()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)")?;
                 writeln!(out, "}}")?;
             }
         } else if !self_is_boxed {
             writeln!(
                 out,
-                "pub fn into_bufs_owner(mut this: Self) -> Result<{}<'static>, TpmErr> {{",
+                "pub fn into_bufs_owner(mut this: Self, alloc: &A) -> Result<{}<'static, A>, TpmErr> {{",
                 table_name
             )?;
             let mut iout = out.make_indent();
-            writeln!(&mut iout, "this.into_bufs_owner_intern()?;")?;
+            writeln!(&mut iout, "this.into_bufs_owner_intern(alloc)?;")?;
             writeln!(
                 &mut iout,
-                "Ok(unsafe {{ mem::transmute::<Self, {}<'static>>(this) }})",
+                "Ok(unsafe {{ mem::transmute::<Self, {}<'static, A>>(this) }})",
                 table_name
             )?;
             writeln!(out, "}}")?;
         } else {
-            writeln!(out, "pub fn into_bufs_owner(mut this: Box<Self>) -> Result<Box<{}<'static>>, TpmErr> {{",
+            writeln!(out, "pub fn into_bufs_owner(mut this: Box<Self, A>, alloc: &A) -> Result<Box<{}<'static, A>, A>, TpmErr> {{",
                      table_name)?;
             let mut iout = out.make_indent();
-            writeln!(&mut iout, "this.into_bufs_owner_intern()?;")?;
+            writeln!(&mut iout, "this.into_bufs_owner_intern(alloc)?;")?;
             writeln!(
                 &mut iout,
-                "Ok(unsafe {{ mem::transmute::<Box<Self>, Box<{}<'static>>>(this) }})",
+                "Ok(unsafe {{ mem::transmute::<Box<Self, A>, Box<{}<'static, A>, A>>(this) }})",
                 table_name
             )?;
             writeln!(out, "}}")?;

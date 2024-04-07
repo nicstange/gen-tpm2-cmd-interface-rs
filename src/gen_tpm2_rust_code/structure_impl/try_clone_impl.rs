@@ -55,28 +55,33 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             ""
         };
 
-        // Structures returned from public unmarshal interfaces live in Box<>es, do the same here
-        // for consistency.
-        let references_inbuf = self.structure_references_inbuf(table);
-        let result_spec = if references_inbuf {
-            tagged_union_name.clone() + "<'static>"
+        let contains_array = self.tagged_union_contains_array(table, discriminant);
+        let references_inbuf = contains_array && self.tagged_union_references_inbuf(table, discriminant);
+        let params_spec = if contains_array {
+            ("<B: Clone + Allocator>", ", alloc: &B", "alloc")
         } else {
-            "Self".to_owned()
+            ("", "", "")
+        };
+        let result_spec = if contains_array {
+            if references_inbuf {
+                (tagged_union_name.clone() + "<'static, B>", tagged_union_name.as_str())
+            } else {
+                (tagged_union_name.clone() + "<B>", tagged_union_name.as_str())
+            }
+        } else {
+            ("Self".to_string(), "Self")
         };
 
         writeln!(
             out,
-            "fn try_clone_intern(&self) -> Result<{}, TpmErr> {{",
-            result_spec
+            "fn try_clone_intern{}(&self{}) -> Result<{}, TpmErr> {{",
+            params_spec.0,
+            params_spec.1,
+            result_spec.0
         )?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "match self {{")?;
         let mut iiout = iout.make_indent();
-        let result_spec = if references_inbuf {
-            tagged_union_name.clone()
-        } else {
-            "Self".to_owned()
-        };
         for selector in UnionSelectorIterator::new(
             &self.tables.structures,
             *discriminant_type,
@@ -128,7 +133,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
             let mut iiiout = iiout.make_indent();
             let mut first = true;
-            // Create a local clone of each array member.
+            // Create a local clone of each array type member.
             for (u, union_table_index, selected_member_index) in selected_union_members.iter() {
                 let union_entry_name = Self::format_structure_member_name(&table.entries[*u].name);
                 let union_table = self.tables.structures.get_union(*union_table_index);
@@ -145,7 +150,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             "let {}_orig = {};",
                             union_entry_name, union_entry_name
                         )?;
-                        writeln!(&mut iiiout, "let mut {} = Vec::new();", union_entry_name)?;
+                        writeln!(&mut iiiout, "let mut {} = Vec::new_in(alloc.clone());", union_entry_name)?;
                         writeln!(
                             &mut iiiout,
                             "{}.try_reserve_exact({}_orig.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;",
@@ -177,7 +182,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     )?;
                                     writeln!(
                                         &mut iiiout.make_indent(),
-                                        "{}.push(element.try_clone_intern()?);",
+                                        "{}.push(element.try_clone_intern(alloc)?);",
                                         union_entry_name
                                     )?;
                                     writeln!(&mut iiiout, "}}")?;
@@ -212,7 +217,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             writeln!(
                 &mut iiiout,
                 "Ok({}::{}{}",
-                &result_spec, enum_member_name, content_seps.0
+                &result_spec.1, enum_member_name, content_seps.0
             )?;
 
             let mut iiiiout = iiiout.make_indent();
@@ -231,7 +236,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         if self.structure_plain_member_contains_array(base_type) {
                             writeln!(
                                 &mut iiiiout,
-                                "{}{}.try_clone_intern()?,",
+                                "{}{}.try_clone_intern(alloc)?,",
                                 dst_spec, union_entry_name
                             )?;
                         } else {
@@ -268,23 +273,28 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             if self_is_boxed {
                 writeln!(
                     out,
-                    "pub fn try_clone(&self) -> Result<Box<{}>, TpmErr> {{",
-                    result_spec
+                    "pub fn try_clone<B: Clone + Allocator>(&self, alloc: &B) -> Result<Box<{}, B>, TpmErr> {{",
+                    result_spec.0
                 )?;
                 writeln!(
                     &mut out.make_indent(),
-                    "Ok(Box::try_new(self.try_clone_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                    "Ok(Box::try_new_in(self.try_clone_intern({})?, alloc).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                    params_spec.2
                 )?;
                 writeln!(out, "}}")?;
             } else {
                 writeln!(
                     out,
-                    "{}fn try_clone(&self) -> Result<{}, TpmErr> {{",
-                    pub_spec, result_spec
+                    "{}fn try_clone{}(&self{}) -> Result<{}, TpmErr> {{",
+                    pub_spec,
+                    params_spec.0,
+                    params_spec.1,
+                    result_spec.0
                 )?;
                 writeln!(
                     &mut out.make_indent(),
-                    "self.try_clone_intern()",
+                    "self.try_clone_intern({})",
+                    params_spec.2
                 )?;
                 writeln!(out, "}}")?;
             }
@@ -312,22 +322,35 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             writeln!(out, "#[cfg({})]", Self::format_deps(&try_clone_deps))?;
         }
 
-        let references_inbuf = self.structure_references_inbuf(table);
         let table_name = Self::camelize(&Self::format_structure_name(table, conditional));
-        let result_spec = if references_inbuf {
-            table_name.clone() + "<'static>"
+
+        let contains_array = self.structure_contains_array(table);
+        let references_inbuf = contains_array && self.structure_references_inbuf(table);
+        let params_spec = if contains_array {
+            ("<B: Clone + Allocator>", ", alloc: &B", "alloc")
         } else {
-            "Self".to_owned()
+            ("", "", "")
+        };
+        let result_spec = if contains_array {
+            if references_inbuf {
+                (table_name.clone() + "<'static, B>", table_name.as_str())
+            } else {
+                (table_name.clone() + "<B>", table_name.as_str())
+            }
+        } else {
+            ("Self".to_string(), "Self")
         };
 
         writeln!(
             out,
-            "fn try_clone_intern(&self) -> Result<{}, TpmErr> {{",
-            result_spec
+            "fn try_clone_intern{}(&self{}) -> Result<{}, TpmErr> {{",
+            params_spec.0,
+            params_spec.1,
+            result_spec.0
         )?;
         let mut iout = out.make_indent();
         let mut first = true;
-        // Create a local clone of each array member.
+        // Create a local clone of each array type member.
         for entry in table.entries.iter() {
             if let StructureTableEntryType::Array(array_type) = &entry.entry_type {
                 if !first {
@@ -347,7 +370,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 };
 
                 let name = Self::format_structure_member_name(&entry.name);
-                writeln!(&mut iiout, "let mut {} = Vec::new();", name)?;
+                writeln!(&mut iiout, "let mut {} = Vec::new_in(alloc.clone());", name)?;
                 writeln!(
                     &mut iiout,
                     "{}.try_reserve_exact(self.{}.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;",
@@ -367,7 +390,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             writeln!(&mut iout, "for element in self.{}.iter() {{", name)?;
                             writeln!(
                                 &mut iout.make_indent(),
-                                "{}.push(element.try_clone_intern()?);",
+                                "{}.push(element.try_clone_intern(alloc)?);",
                                 name
                             )?;
                             writeln!(&mut iout, "}}")?;
@@ -395,12 +418,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         if !first {
             writeln!(&mut iout)?;
         }
-        let result_spec = if references_inbuf {
-            table_name
-        } else {
-            "Self".to_owned()
-        };
-        writeln!(&mut iout, "Ok({} {{", result_spec)?;
+        writeln!(&mut iout, "Ok({} {{", result_spec.1)?;
         let mut iiout = iout.make_indent();
         for j in 0..table.entries.len() {
             let entry = &table.entries[j];
@@ -422,7 +440,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     }
                     let base_type = plain_type.resolved_base_type.as_ref().unwrap();
                     if self.structure_plain_member_contains_array(base_type) {
-                        writeln!(&mut iiout, "{}: self.{}.try_clone_intern()?,", name, name)?;
+                        writeln!(&mut iiout, "{}: self.{}.try_clone_intern(alloc)?,", name, name)?;
                     } else {
                         writeln!(&mut iiout, "{}: self.{},", name, name)?;
                     }
@@ -463,7 +481,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     }
 
                     if self.tagged_union_contains_array(table, discriminant) {
-                        writeln!(&mut iiout, "{}: self.{}.try_clone_intern()?,", name, name)?;
+                        writeln!(&mut iiout, "{}: self.{}.try_clone_intern(alloc)?,", name, name)?;
                     } else {
                         writeln!(&mut iiout, "{}: self.{},", name, name)?;
                     }
@@ -489,23 +507,27 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             if self_is_boxed {
                 writeln!(
                     out,
-                    "pub fn try_clone(&self) -> Result<Box<{}>, TpmErr> {{",
-                    result_spec
+                    "pub fn try_clone<B: Clone + Allocator>(&self, alloc: &B) -> Result<Box<{}, B>, TpmErr> {{",
+                    result_spec.0
                 )?;
                 writeln!(
                     &mut out.make_indent(),
-                    "Ok(Box::try_new(self.try_clone_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                    "Ok(Box::try_new_in(self.try_clone_intern({})?, alloc.clone()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                    params_spec.2
                 )?;
                 writeln!(out, "}}")?;
             } else {
                 writeln!(
                     out,
-                    "pub fn try_clone(&self) -> Result<{}, TpmErr> {{",
-                    result_spec
+                    "pub fn try_clone{}(&self{}) -> Result<{}, TpmErr> {{",
+                    params_spec.0,
+                    params_spec.1,
+                    result_spec.0
                 )?;
                 writeln!(
                     &mut out.make_indent(),
-                    "self.try_clone_intern()",
+                    "self.try_clone_intern({})",
+                    params_spec.2,
                 )?;
                 writeln!(out, "}}")?;
             }

@@ -74,28 +74,28 @@ pub enum TpmErr {{
 }}
 
 #[derive(Clone, Debug)]
-pub enum TpmBuffer<'a> {{
+pub enum TpmBuffer<'a, A: Allocator> {{
     Borrowed(&'a [u8]),
-    Owned(Vec<u8>),
+    Owned(Vec<u8, A>),
 }}
 
-impl<'a> TpmBuffer<'a> {{
-    pub fn into_owned(self) -> Result<TpmBuffer<'static>, TpmErr> {{
-        let o = match self {{
+impl<'a, A: Allocator> TpmBuffer<'a, A> {{
+    pub fn into_owned(mut self, alloc: A) -> Result<TpmBuffer<'static, A>, TpmErr> {{
+        let o = match &mut self {{
             Self::Borrowed(b) => {{
-                let mut o = Vec::new();
+                let mut o = Vec::new_in(alloc);
                 o.try_reserve_exact(b.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;
                 o.extend_from_slice(&b);
                 o
             }},
-            Self::Owned(o) => o,
+            Self::Owned(o) => mem::replace(o, Vec::new_in(alloc)),
         }};
-        Ok(TpmBuffer::<'static>::Owned(o))
+        Ok(TpmBuffer::<'static, A>::Owned(o))
     }}
 }}
 
 #[cfg(zeroize)]
-impl<'a> Drop for TpmBuffer<'a> {{
+impl<'a, A: Allocator> Drop for TpmBuffer<'a, A> {{
     fn drop(&mut self) {{
         match self {{
             Self::Borrowed(_) => (),
@@ -106,7 +106,7 @@ impl<'a> Drop for TpmBuffer<'a> {{
     }}
 }}
 
-impl<'a> ops::Deref for TpmBuffer<'a> {{
+impl<'a, A: Allocator> ops::Deref for TpmBuffer<'a, A> {{
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {{
@@ -117,13 +117,13 @@ impl<'a> ops::Deref for TpmBuffer<'a> {{
     }}
 }}
 
-impl<'a> convert::From<&'a [u8]> for TpmBuffer<'a> {{
+impl<'a, A: Allocator> convert::From<&'a [u8]> for TpmBuffer<'a, A> {{
     fn from(value: &'a [u8]) -> Self {{
         Self::Borrowed(value)
     }}
 }}
 
-impl<'a> PartialEq for TpmBuffer<'a> {{
+impl<'a, A: Allocator> PartialEq for TpmBuffer<'a, A> {{
     fn eq(&self, other: &Self) -> bool {{
         <Self as ops::Deref>::deref(self) == <Self as ops::Deref>::deref(other)
     }}
