@@ -187,7 +187,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     )?;
                                     writeln!(
                                         &mut iiiout.make_indent(),
-                                        "{}.push(element.try_clone_intern(alloc)?);",
+                                        "let _ = {}.push_within_capacity(element.try_clone_intern(alloc)?);",
                                         union_entry_name
                                     )?;
                                     writeln!(&mut iiiout, "}}")?;
@@ -402,7 +402,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             writeln!(&mut iout, "for element in self.{}.iter() {{", name)?;
                             writeln!(
                                 &mut iout.make_indent(),
-                                "{}.push(element.try_clone_intern(alloc)?);",
+                                "let _ = {}.push_within_capacity(element.try_clone_intern(alloc)?);",
                                 name
                             )?;
                             writeln!(&mut iout, "}}")?;

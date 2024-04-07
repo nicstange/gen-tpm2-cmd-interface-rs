@@ -187,7 +187,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     )?;
                                     writeln!(
                                         &mut iiout.make_indent(),
-                                        "{}.push(element.into_bufs_owner_intern(alloc)?);",
+                                        "let _ = {}.push_within_capacity(element.into_bufs_owner_intern(alloc)?);",
                                         name
                                     )?;
                                     writeln!(&mut iiout, "}}")?;
@@ -570,7 +570,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         )?;
                                         writeln!(
                                             &mut iiiout.make_indent(),
-                                            "{}.push(element.into_bufs_owner_intern(alloc)?);",
+                                            "let _ = {}.push_within_capacity(element.into_bufs_owner_intern(alloc)?);",
                                             union_entry_name
                                         )?;
                                         writeln!(&mut iiiout, "}}")?;
