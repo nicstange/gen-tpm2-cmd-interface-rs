@@ -256,6 +256,124 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         false
     }
 
+    fn structure_plain_member_contains_nonbyte_array(
+        &self,
+        resolved_plain_type: &StructureTableEntryResolvedBaseType,
+    ) -> bool {
+        match resolved_plain_type {
+            StructureTableEntryResolvedBaseType::Predefined(_) => false,
+            StructureTableEntryResolvedBaseType::Constants(_) => false,
+            StructureTableEntryResolvedBaseType::Bits(_) => false,
+            StructureTableEntryResolvedBaseType::Type(_) => false,
+            StructureTableEntryResolvedBaseType::Structure(i) => {
+                self.structure_contains_nonbyte_array(&self.tables.structures.get_structure(*i))
+            }
+        }
+    }
+
+    fn union_member_contains_nonbyte_array(&self, entry_type: &UnionTableEntryType) -> bool {
+        match entry_type {
+            UnionTableEntryType::Plain(plain_type) => {
+                if let Some(plain_type) = plain_type.resolved_base_type.as_ref() {
+                    self.structure_plain_member_contains_nonbyte_array(plain_type)
+                } else {
+                    false
+                }
+            }
+            UnionTableEntryType::Array(array_type) => {
+                match array_type.resolved_element_type.as_ref().unwrap() {
+                    StructureTableEntryResolvedBaseType::Predefined(predefined) => {
+                        predefined.bits != 8 || predefined.signed
+                    }
+                    _ => true,
+                }
+            }
+        }
+    }
+
+    fn union_contains_nonbyte_array(
+        &self,
+        discriminant_type: &StructureTableEntryResolvedDiscriminantType,
+        union_table: &UnionTable,
+    ) -> bool {
+        for selector in
+            UnionSelectorIterator::new(&self.tables.structures, *discriminant_type, true)
+        {
+            let entry = union_table.lookup_member(selector.name()).unwrap();
+            let entry = &union_table.entries[entry];
+            if self.union_member_contains_nonbyte_array(&entry.entry_type) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn structure_member_contains_nonbyte_array(
+        &self,
+        table: &StructureTable,
+        entry_type: &StructureTableEntryType,
+    ) -> bool {
+        match entry_type {
+            StructureTableEntryType::Plain(plain_type) => self
+                .structure_plain_member_contains_nonbyte_array(
+                    plain_type.resolved_base_type.as_ref().unwrap(),
+                ),
+            StructureTableEntryType::Discriminant(_) => false,
+            StructureTableEntryType::Union(union_type) => {
+                let discriminant_entry = union_type.resolved_discriminant.unwrap();
+                let discriminant_entry = &table.entries[discriminant_entry];
+                let discriminant_type =
+                    Self::to_structure_discriminant_entry_type(&discriminant_entry.entry_type);
+                let discriminant_type = discriminant_type
+                    .resolved_discriminant_type
+                    .as_ref()
+                    .unwrap();
+                let union_table = self
+                    .tables
+                    .structures
+                    .get_union(union_type.resolved_union_type.unwrap());
+                self.union_contains_nonbyte_array(discriminant_type, &union_table)
+            }
+            StructureTableEntryType::Array(array_type) => {
+                match array_type.resolved_element_type.as_ref().unwrap() {
+                    StructureTableEntryResolvedBaseType::Predefined(predefined) => {
+                        predefined.bits != 8 || predefined.signed
+                    }
+                    _ => true,
+                }
+            }
+        }
+    }
+
+    fn structure_contains_nonbyte_array(&self, table: &StructureTable) -> bool {
+        for entry in table.entries.iter() {
+            if self.structure_member_contains_nonbyte_array(table, &entry.entry_type) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn tagged_union_contains_nonbyte_array(
+        &self,
+        table: &StructureTable,
+        discriminant: &StructureTableEntryDiscriminantType,
+    ) -> bool {
+        for k in discriminant.discriminated_union_members.iter() {
+            let union_member_entry = &table.entries[*k];
+            let union_type = Self::to_structure_union_entry_type(&union_member_entry.entry_type);
+            let union_table_index = union_type.resolved_union_type.unwrap();
+            let union_table = self.tables.structures.get_union(union_table_index);
+            if self.union_contains_nonbyte_array(
+                discriminant.resolved_discriminant_type.as_ref().unwrap(),
+                &union_table,
+            ) {
+                return true;
+            }
+        }
+        false
+    }
+
     fn format_structure_member_array_type(
         &self,
         element_type: &StructureTableEntryResolvedBaseType,
