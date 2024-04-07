@@ -410,6 +410,26 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         false
     }
 
+    fn tagged_union_member_contains_array(
+        &self,
+        table: &StructureTable,
+        discriminant: &StructureTableEntryDiscriminantType,
+        selector: &str,
+    ) -> bool {
+        for k in discriminant.discriminated_union_members.iter() {
+            let union_member_entry = &table.entries[*k];
+            let union_type = Self::to_structure_union_entry_type(&union_member_entry.entry_type);
+            let union_table_index = union_type.resolved_union_type.unwrap();
+            let union_table = self.tables.structures.get_union(union_table_index);
+            let union_entry = union_table.lookup_member(selector).unwrap();
+            let union_entry = &union_table.entries[union_entry];
+            if self.union_member_contains_array(&union_entry.entry_type) {
+                return true;
+            }
+        }
+        false
+    }
+
     pub(super) fn format_tagged_union_member_value(
         &self,
         selector_value_index: StructuresPartTablesConstantIndex,
