@@ -150,19 +150,14 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             "let {}_orig = {};",
                             union_entry_name, union_entry_name
                         )?;
-                        writeln!(&mut iiiout, "let mut {} = Vec::new_in(alloc.clone());", union_entry_name)?;
-                        writeln!(
-                            &mut iiiout,
-                            "{}.try_reserve_exact({}_orig.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;",
-                            union_entry_name, union_entry_name
-                        )?;
                         let element_type = array_type.resolved_element_type.as_ref().unwrap();
                         match element_type {
                             StructureTableEntryResolvedBaseType::Predefined(predefined) => {
                                 writeln!(
                                     &mut iiiout,
-                                    "{}.extend_from_slice(&{}_orig);",
-                                    union_entry_name, union_entry_name
+                                    "let {} = copy_vec_from_slice({}_orig, alloc.clone())?;",
+                                    union_entry_name,
+                                    union_entry_name,
                                 )?;
                                 if predefined.bits == 8 && !predefined.signed {
                                     writeln!(
@@ -177,6 +172,16 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 if self.structure_contains_array(&structure_table) {
                                     writeln!(
                                         &mut iiiout,
+                                        "let mut {} = Vec::new_in(alloc.clone());",
+                                        union_entry_name
+                                    )?;
+                                    writeln!(
+                                        &mut iiiout,
+                                        "{}.try_reserve_exact({}_orig.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;",
+                                        union_entry_name, union_entry_name
+                                    )?;
+                                    writeln!(
+                                        &mut iiiout,
                                         "for element in {}_orig.iter() {{",
                                         union_entry_name
                                     )?;
@@ -189,16 +194,18 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 } else {
                                     writeln!(
                                         &mut iiiout,
-                                        "{}.extend_from_slice(&{}_orig);",
-                                        union_entry_name, union_entry_name
+                                        "let {} = copy_vec_from_slice({}_orig, alloc.clone())?;",
+                                        union_entry_name,
+                                        union_entry_name,
                                     )?;
                                 }
                             }
                             _ => {
                                 writeln!(
                                     &mut iiiout,
-                                    "{}.extend_from_slice(&{}_orig);",
-                                    union_entry_name, union_entry_name
+                                    "let {} = copy_vec_from_slice({}_orig, alloc.clone())?;",
+                                    union_entry_name,
+                                    union_entry_name,
                                 )?;
                             }
                         };
@@ -370,16 +377,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 };
 
                 let name = Self::format_structure_member_name(&entry.name);
-                writeln!(&mut iiout, "let mut {} = Vec::new_in(alloc.clone());", name)?;
-                writeln!(
-                    &mut iiout,
-                    "{}.try_reserve_exact(self.{}.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;",
-                    name, name
-                )?;
                 let element_type = array_type.resolved_element_type.as_ref().unwrap();
                 match element_type {
                     StructureTableEntryResolvedBaseType::Predefined(predefined) => {
-                        writeln!(&mut iout, "{}.extend_from_slice(&self.{});", name, name)?;
+                        writeln!(
+                            &mut iout,
+                            "let {} = copy_vec_from_slice(&self.{}, alloc.clone())?;",
+                            name,
+                            name,
+                        )?;
                         if predefined.bits == 8 && !predefined.signed {
                             writeln!(&mut iout, "let {} = TpmBuffer::Owned({});", name, name)?;
                         }
@@ -387,6 +393,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     StructureTableEntryResolvedBaseType::Structure(index) => {
                         let structure_table = self.tables.structures.get_structure(*index);
                         if self.structure_contains_array(&structure_table) {
+                            writeln!(&mut iiout, "let mut {} = Vec::new_in(alloc.clone());", name)?;
+                            writeln!(
+                                &mut iiout,
+                                "{}.try_reserve_exact(self.{}.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;",
+                                name, name
+                            )?;
                             writeln!(&mut iout, "for element in self.{}.iter() {{", name)?;
                             writeln!(
                                 &mut iout.make_indent(),
@@ -395,11 +407,21 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             )?;
                             writeln!(&mut iout, "}}")?;
                         } else {
-                            writeln!(&mut iout, "{}.extend_from_slice(&self.{});", name, name)?;
+                            writeln!(
+                                &mut iout,
+                                "let {} = copy_vec_from_slice(&self.{}, alloc.clone())?;",
+                                name,
+                                name,
+                            )?;
                         }
                     }
                     _ => {
-                        writeln!(&mut iout, "{}.extend_from_slice(&self.{});", name, name)?;
+                        writeln!(
+                            &mut iout,
+                            "let {} = copy_vec_from_slice(&self.{}, alloc.clone())?;",
+                            name,
+                            name,
+                        )?;
                     }
                 };
                 if !deps.is_unconditional_true() {

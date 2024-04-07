@@ -72,7 +72,41 @@ pub enum TpmErr {{
     Rc(u32),
     InternalErr,
 }}
+",
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION")
+        )?;
 
+        if !enable_panic_free {
+            write!(
+                &mut out,
+                "
+fn copy_vec_from_slice<T: Copy, A: Allocator>(slice: &[T], alloc: A) -> Result<Vec<T, A>, TpmErr> {{
+    let mut v = Vec::new_in(alloc);
+    v.try_reserve_exact(slice.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;
+    v.extend_from_slice(slice);
+    Ok(v)
+}}
+"
+            )?;
+        } else {
+            write!(
+                &mut out,
+                "
+fn copy_vec_from_slice<T: Copy, A: Allocator>(slice: &[T], alloc: A) -> Result<Vec<T, A>, TpmErr> {{
+    let mut v = Vec::new_in(alloc);
+    v.try_reserve_exact(slice.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;
+    unsafe {{ ptr::copy_nonoverlapping(slice.as_ptr(), v.as_mut_ptr(), slice.len()) }};
+    unsafe {{ v.set_len(slice.len()) }};
+    Ok(v)
+}}
+"
+            )?;
+        }
+
+        write!(
+            &mut out,
+            "
 #[derive(Clone, Debug)]
 pub enum TpmBuffer<'a, A: Allocator> {{
     Borrowed(&'a [u8]),
@@ -82,12 +116,7 @@ pub enum TpmBuffer<'a, A: Allocator> {{
 impl<'a, A: Allocator> TpmBuffer<'a, A> {{
     pub fn into_owned(mut self, alloc: A) -> Result<TpmBuffer<'static, A>, TpmErr> {{
         let o = match &mut self {{
-            Self::Borrowed(b) => {{
-                let mut o = Vec::new_in(alloc);
-                o.try_reserve_exact(b.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;
-                o.extend_from_slice(&b);
-                o
-            }},
+            Self::Borrowed(b) => copy_vec_from_slice(b, alloc)?,
             Self::Owned(o) => mem::replace(o, Vec::new_in(alloc)),
         }};
         Ok(TpmBuffer::<'static, A>::Owned(o))
@@ -128,9 +157,7 @@ impl<'a, A: Allocator> PartialEq for TpmBuffer<'a, A> {{
         <Self as ops::Deref>::deref(self) == <Self as ops::Deref>::deref(other)
     }}
 }}
-",
-            env!("CARGO_PKG_NAME"),
-            env!("CARGO_PKG_VERSION")
+"
         )?;
 
         if !self.tables.structures.predefined_constants_deps.is_empty() {
