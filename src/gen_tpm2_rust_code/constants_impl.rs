@@ -497,7 +497,10 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 .closure_deps
                 .collect_config_deps(ClosureDepsFlags::ANY_SIZE | ClosureDepsFlags::ANY_MAX_SIZE);
             marshalled_size_deps.factor_by_common_of(&table_deps);
-            let pub_spec = if table.closure_deps.any(ClosureDepsFlags::EXTERN_MAX_SIZE) {
+            let pub_spec = if table
+                .closure_deps
+                .any(ClosureDepsFlags::EXTERN_SIZE | ClosureDepsFlags::EXTERN_MAX_SIZE)
+            {
                 "pub "
             } else {
                 ""
