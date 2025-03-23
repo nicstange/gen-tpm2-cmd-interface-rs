@@ -56,6 +56,12 @@ struct Cli {
     #[arg(name = "gen-unmarshal-cond", short = 'U', long, action = clap::ArgAction::Append)]
     unmarshal_patterns_cond: Vec<regex::Regex>,
 
+    #[arg(name = "gen-size", short = 's', long, action = clap::ArgAction::Append)]
+    max_size_patterns_noncond: Vec<regex::Regex>,
+
+    #[arg(name = "gen-size-cond", short = 'S', long, action = clap::ArgAction::Append)]
+    max_size_patterns_cond: Vec<regex::Regex>,
+
     #[arg(name = "gen-into-buffers-owner", short = 'o' , long, action = clap::ArgAction::Append)]
     into_bufs_owner_patterns_noncond: Vec<regex::Regex>,
 
@@ -100,6 +106,16 @@ fn main() -> Result<(), io::Error> {
         tables
             .structures
             .set_closure_deps_for(ClosureDepsFlags::EXTERN_MARSHAL, p, true)?;
+    }
+    for p in cli.max_size_patterns_noncond.iter() {
+        tables
+            .structures
+            .set_closure_deps_for(ClosureDepsFlags::EXTERN_MAX_SIZE, p, false)?;
+    }
+    for p in cli.max_size_patterns_cond.iter() {
+        tables
+            .structures
+            .set_closure_deps_for(ClosureDepsFlags::EXTERN_MAX_SIZE, p, true)?;
     }
     for p in cli.try_clone_patterns_noncond.iter() {
         tables
