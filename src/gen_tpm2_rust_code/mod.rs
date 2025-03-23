@@ -200,7 +200,7 @@ impl<'a, A: Allocator> PartialEq for TpmBuffer<'a, A> {{
             for s in ['u', 'i'] {
                 let t = format!("{}{}", s, b);
                 writeln!(&mut out)?;
-                writeln!(&mut out,"fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{",
+                writeln!(&mut out,"pub fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{",
                          &t, &t)?;
                 let mut iout = out.make_indent();
                 writeln!(&mut iout, "let (consumed, buf) = split_slice_at(buf, mem::size_of::<{}>())?;", &t)?;
@@ -227,7 +227,7 @@ impl<'a, A: Allocator> PartialEq for TpmBuffer<'a, A> {{
                 writeln!(&mut out)?;
                 writeln!(
                     &mut out,
-                    "fn marshal_{}<'a>(buf: &mut [u8], value: {}) -> Result<&mut [u8], TpmErr> {{",
+                    "pub fn marshal_{}<'a>(buf: &mut [u8], value: {}) -> Result<&mut [u8], TpmErr> {{",
                     &t, &t
                 )?;
                 let mut iout = out.make_indent();
