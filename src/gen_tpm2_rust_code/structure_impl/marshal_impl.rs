@@ -176,6 +176,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
         table: &StructureTable,
         conditional: bool,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error> {
         let table_closure_deps = if !conditional {
             &table.closure_deps
@@ -377,6 +378,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             &marshal_deps,
                             conditional,
                             &|out| writeln!(out, "return Err(TpmErr::InternalErr);"),
+                            enable_allocator_api,
                         )?;
 
                         let base_type = match base_type {
@@ -573,6 +575,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         discriminant_member: usize,
         is_structure_member_repr: bool,
         conditional: bool,
+        enable_allocator_api: bool,
         enable_enum_transmute: bool,
     ) -> Result<(), io::Error> {
         let discriminant_entry = &table.entries[discriminant_member];
@@ -795,6 +798,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             &marshal_deps,
                             conditional,
                             &|out| writeln!(out, "return Err(TpmErr::InternalErr);"),
+                            enable_allocator_api,
                         )?;
 
                         let base_type = match plain_type.resolved_base_type.as_ref().unwrap() {

@@ -16,6 +16,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     pub(super) fn gen_commands_macro<W: io::Write>(
         &self,
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error> {
         writeln!(out)?;
         writeln!(out, "macro_rules! with_tpm_commands {{")?;
@@ -30,7 +31,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         for i in 0..self.tables.commands.len() {
             let c = &self.tables.commands[i];
             writeln!(&mut iiiout, "{{")?;
-            self.gen_commands_macro_entry(&mut iiiout.make_indent(), c)?;
+            self.gen_commands_macro_entry(&mut iiiout.make_indent(), c, enable_allocator_api)?;
             let sep = if i != self.tables.commands.len() - 1 {
                 ","
             } else {
@@ -49,6 +50,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         &self,
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
         command: &CommandsPartTablesEntry,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error> {
         let command_code_index = command.command_code;
         let command_code_table_index = StructuresPartTablesConstantsIndex::from(command_code_index);
@@ -122,6 +124,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             plain_type.resolved_base_type.as_ref().unwrap(),
                             plain_type.base_type_enable_conditional,
                             false,
+                            enable_allocator_api,
                         ),
                     _ => unreachable!(),
                 };
@@ -185,6 +188,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             plain_type.resolved_base_type.as_ref().unwrap(),
                             plain_type.base_type_enable_conditional,
                             false,
+                            enable_allocator_api,
                         ),
                     _ => unreachable!(),
                 };

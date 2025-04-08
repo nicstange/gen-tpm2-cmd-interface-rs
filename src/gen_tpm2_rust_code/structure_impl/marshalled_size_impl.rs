@@ -83,6 +83,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         &self,
         plain_type: &StructureTableEntryResolvedBaseType,
         conditional: bool,
+        enable_allocator_api: bool,
     ) -> (String, Option<PredefinedTypeRef>) {
         match plain_type {
             StructureTableEntryResolvedBaseType::Predefined(p) => (
@@ -92,7 +93,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             StructureTableEntryResolvedBaseType::Constants(_)
             | StructureTableEntryResolvedBaseType::Bits(_) => {
                 assert!(!conditional);
-                let type_spec = self.format_structure_member_plain_type(plain_type, false, true);
+                let type_spec = self.format_structure_member_plain_type(
+                    plain_type,
+                    false,
+                    true,
+                    enable_allocator_api,
+                );
                 let member_size_type = PredefinedTypes::find_type_with_repr(16, false).unwrap();
                 (
                     format!("{}::marshalled_size()", type_spec),
@@ -100,8 +106,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 )
             }
             StructureTableEntryResolvedBaseType::Type(_) => {
-                let type_spec =
-                    self.format_structure_member_plain_type(plain_type, conditional, true);
+                let type_spec = self.format_structure_member_plain_type(
+                    plain_type,
+                    conditional,
+                    true,
+                    enable_allocator_api,
+                );
                 let member_size_type = PredefinedTypes::find_type_with_repr(16, false).unwrap();
                 (
                     format!("{}::marshalled_size()", type_spec),
@@ -134,6 +144,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         plain_type: &StructureTableEntryResolvedBaseType,
         conditional: bool,
         handle_err: &HE,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error>
     where
         HE: Fn(&mut code_writer::IndentedCodeWriter<'_, W>) -> Result<(), io::Error>,
@@ -147,6 +158,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     .format_structure_member_plain_type_compiletime_fixed_size(
                         plain_type,
                         conditional,
+                        enable_allocator_api,
                     );
                 if size_type.is_none() {
                     writeln!(out, "let {}_size = {};", dst_name, &size)?;
@@ -174,6 +186,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         .format_structure_member_plain_type_compiletime_fixed_size(
                             plain_type,
                             conditional,
+                            enable_allocator_api,
                         );
                     if size_type.is_none() {
                         writeln!(out, "let {}_size = {};", dst_name, &size)?;
@@ -258,6 +271,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         plain_type: &StructureTableEntryResolvedBaseType,
         conditional: bool,
         handle_err: &HE,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error>
     where
         HE: Fn(&mut code_writer::IndentedCodeWriter<'_, W>) -> Result<(), io::Error>,
@@ -274,6 +288,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     plain_type,
                     conditional,
                     handle_err,
+                    enable_allocator_api,
                 );
             }
             StructureTableEntryResolvedBaseType::Structure(index) => {
@@ -287,6 +302,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         plain_type,
                         conditional,
                         handle_err,
+                        enable_allocator_api,
                     );
                 }
 
@@ -337,6 +353,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         array_size: &Expr,
         conditional: bool,
         handle_err: &HE,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error>
     where
         HE: Fn(&mut code_writer::IndentedCodeWriter<'_, W>) -> Result<(), io::Error>,
@@ -407,6 +424,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     element_type,
                     conditional,
                     handle_err,
+                    enable_allocator_api,
                 )?;
                 writeln!(
                     out,
@@ -431,6 +449,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 element_type,
                 conditional,
                 handle_err,
+                enable_allocator_api,
             )?;
             writeln!(out, "}}")?;
         }
@@ -532,6 +551,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         plain_type: &StructureTableEntryResolvedBaseType,
         conditional: bool,
         size_type: PredefinedTypeRef,
+        enable_allocator_api: bool,
     ) -> String {
         match plain_type {
             StructureTableEntryResolvedBaseType::Predefined(_)
@@ -542,6 +562,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     .format_structure_member_plain_type_compiletime_fixed_size(
                         plain_type,
                         conditional,
+                        enable_allocator_api,
                     );
                 match member_size_type {
                     None => {
@@ -578,6 +599,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         .format_structure_member_plain_type_compiletime_fixed_size(
                             plain_type,
                             conditional,
+                            enable_allocator_api,
                         );
                     match member_size_type {
                         None => {
@@ -632,6 +654,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         conditional: bool,
         size_type: PredefinedTypeRef,
         handle_err: &mut HE,
+        enable_allocator_api: bool,
     ) -> Result<String, io::Error>
     where
         HE: FnMut(&mut code_writer::IndentedCodeWriter<'_, W>) -> Result<(), io::Error>,
@@ -645,6 +668,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     plain_type,
                     conditional,
                     size_type,
+                    enable_allocator_api,
                 )),
             StructureTableEntryResolvedBaseType::Structure(index) => {
                 let table = self.tables.structures.get_structure(*index);
@@ -654,6 +678,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             plain_type,
                             conditional,
                             size_type,
+                            enable_allocator_api,
                         ),
                     );
                 };
@@ -693,6 +718,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
         table: &StructureTable,
         conditional: bool,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error> {
         let table_closure_deps = if !conditional {
             &table.closure_deps
@@ -799,6 +825,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             plain_type,
                             enable_conditional,
                             size_type,
+                            enable_allocator_api,
                         );
                     writeln!(&mut iiout, "size += {};", member_max_size)?;
 
@@ -828,6 +855,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             &base_type,
                             enable_conditional,
                             size_type,
+                            enable_allocator_api,
                         );
                     writeln!(&mut iout, "size += {};", member_max_size)?;
                 }
@@ -928,6 +956,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 element_type,
                                 enable_conditional,
                                 size_type,
+                                enable_allocator_api,
                             );
                         writeln!(&mut iiout, "size += {} * {};", element_size, array_size.0)?;
                     } else {
@@ -972,6 +1001,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         enable_conditional,
                         size_type,
                         &mut |out| writeln!(out, "return Err(());"),
+                        enable_allocator_api,
                     )?;
                     writeln!(
                         &mut iiout,
@@ -1058,6 +1088,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             enable_conditional,
                             size_type,
                             &mut |out| writeln!(out, "return Err(());"),
+                            enable_allocator_api,
                         )?;
                         writeln!(
                             &mut iiout,
@@ -1179,6 +1210,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         size_deps: &ConfigDepsDisjunction,
         conditional: bool,
         handle_err: &HE,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error>
     where
         HE: Fn(&mut code_writer::IndentedCodeWriter<'_, W>) -> Result<(), io::Error>,
@@ -1222,6 +1254,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         base_type,
                         enable_conditional,
                         handle_err,
+                        enable_allocator_api,
                     )?;
                     if !deps.is_unconditional_true() {
                         writeln!(out, "}}")?;
@@ -1243,12 +1276,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             entry,
                         );
                         let type_spec = Self::camelize(&type_spec);
-                        let type_spec =
-                            if self.tagged_union_contains_array(table, discriminant) {
-                                type_spec + "::<'_, A>"
-                            } else {
-                                type_spec
-                            };
+                        let type_spec = if self.tagged_union_contains_array(table, discriminant) {
+                            type_spec + "::<'_, A>"
+                        } else {
+                            type_spec
+                        };
 
                         let member_name =
                             Self::format_structure_member_name(&entry.name).into_owned() + "_";
@@ -1337,6 +1369,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         array_size,
                         enable_conditional,
                         handle_err,
+                        enable_allocator_api,
                     )?;
                     if !deps.is_unconditional_true() {
                         writeln!(out, "}}")?;
@@ -1379,6 +1412,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         base_type,
                         enable_conditional,
                         handle_err,
+                        enable_allocator_api,
                     )?;
                 }
                 StructureTableEntryType::Discriminant(_) => {
@@ -1470,6 +1504,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         array_size,
                         enable_conditional,
                         handle_err,
+                        enable_allocator_api,
                     )?;
                 }
             };
@@ -1487,6 +1522,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
         table: &StructureTable,
         conditional: bool,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error> {
         let table_closure_deps = if !conditional {
             &table.closure_deps
@@ -1547,6 +1583,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             &size_deps,
             conditional,
             &|out| writeln!(out, "return Err(());"),
+            enable_allocator_api,
         )?;
         writeln!(&mut iout)?;
         writeln!(&mut iout, "Ok(size)")?;
@@ -1564,6 +1601,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         discriminant_member: usize,
         is_structure_member_repr: bool,
         conditional: bool,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error> {
         let discriminant_entry = &table.entries[discriminant_member];
         assert!(discriminant_entry.deps.is_unconditional_true());
@@ -1594,6 +1632,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         let discriminant_size = self.format_structure_member_plain_type_compiletime_fixed_size(
             &base_type,
             discriminant_enable_conditional,
+            enable_allocator_api,
         );
         writeln!(
             out,
@@ -1639,7 +1678,8 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 )?;
             }
 
-            let selected_union_members = self.get_structure_selected_union_members(table, discriminant, &selector);
+            let selected_union_members =
+                self.get_structure_selected_union_members(table, discriminant, &selector);
             let enum_member_name = self.format_tagged_union_member_name(&selector);
             let enum_member_name = Self::camelize(&enum_member_name);
             if selected_union_members.is_empty() {
@@ -1721,6 +1761,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             base_type,
                             plain_type.base_type_enable_conditional,
                             &|out| writeln!(out, "return Err(());"),
+                            enable_allocator_api,
                         )?;
                     }
                     UnionTableEntryType::Array(array_type) => {
@@ -1735,6 +1776,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             &array_type.size,
                             array_type.element_type_enable_conditional,
                             &|out| writeln!(out, "return Err(());"),
+                            enable_allocator_api,
                         )?;
                     }
                 };
@@ -1787,6 +1829,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 &size_deps,
                 conditional,
                 &|out| writeln!(out, "return Err(());"),
+                enable_allocator_api,
             )?;
             writeln!(&mut iout)?;
             writeln!(&mut iout, "Ok(size)")?;

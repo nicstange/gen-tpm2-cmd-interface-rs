@@ -17,6 +17,9 @@ struct Cli {
     #[arg(name = "tables-file", short, long, action = clap::ArgAction::Append, required = true)]
     input_files: Vec<path::PathBuf>,
 
+    #[arg(name = "enable-allocator-api", long)]
+    enable_allocator_api: bool,
+
     #[arg(name = "enable-unsafe-panic-free", long)]
     enable_panic_free: bool,
 
@@ -142,6 +145,7 @@ fn main() -> Result<(), io::Error> {
     let codegen = gen_tpm2_rust_code::Tpm2InterfaceRustCodeGenerator::new(&tables);
     codegen.generate(
         &mut io::stdout(),
+        cli.enable_allocator_api,
         cli.enable_panic_free,
         cli.enable_unaligned_accesses,
         cli.enable_enum_transmute,

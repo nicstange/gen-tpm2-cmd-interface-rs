@@ -17,17 +17,16 @@ use structures::structure_table::{
 use structures::table_common::ClosureDepsFlags;
 use structures::tables::{
     StructuresPartTablesConstantIndex, StructuresPartTablesStructureIndex,
-    StructuresPartTablesUnionIndex, UnionSelectorIterator,
-    UnionSelectorIteratorValue,
+    StructuresPartTablesUnionIndex, UnionSelectorIterator, UnionSelectorIteratorValue,
 };
 use structures::union_table::{UnionTable, UnionTableEntryType};
 
 use super::{code_writer, Tpm2InterfaceRustCodeGenerator};
 
-mod tagged_union_conversions;
 mod into_bufs_owner_impl;
 mod marshal_impl;
 mod marshalled_size_impl;
+mod tagged_union_conversions;
 mod try_clone_impl;
 mod unmarshal_impl;
 
@@ -379,20 +378,35 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         element_type: &StructureTableEntryResolvedBaseType,
         conditional: bool,
         use_anon_liftime: bool,
+        enable_allocator_api: bool,
     ) -> String {
         if let StructureTableEntryResolvedBaseType::Predefined(predefined) = element_type {
             if predefined.bits == 8 && !predefined.signed {
                 if !use_anon_liftime {
-                    return "TpmBuffer<'a, A>".to_owned();
+                    if enable_allocator_api {
+                        return "TpmBuffer<'a, A>".to_owned();
+                    } else {
+                        return "TpmBuffer<'a>".to_owned();
+                    }
                 } else {
-                    return "TpmBuffer::<'_, A>".to_owned();
+                    if enable_allocator_api {
+                        return "TpmBuffer::<'_, A>".to_owned();
+                    } else {
+                        return "TpmBuffer::<'_>".to_owned();
+                    }
                 }
             }
         }
 
         "Vec<".to_owned()
-            + &self.format_structure_member_plain_type(element_type, conditional, use_anon_liftime)
-            + ", A>"
+            + &self.format_structure_member_plain_type(
+                element_type,
+                conditional,
+                use_anon_liftime,
+                enable_allocator_api,
+            )
+            + enable_allocator_api.then_some(", A").unwrap_or("")
+            + ">"
     }
 
     pub(in super::super) fn format_structure_member_plain_type(
@@ -400,6 +414,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         plain_type: &StructureTableEntryResolvedBaseType,
         conditional: bool,
         use_anon_liftime: bool,
+        enable_allocator_api: bool,
     ) -> borrow::Cow<str> {
         match plain_type {
             StructureTableEntryResolvedBaseType::Predefined(predefined) => {
@@ -439,15 +454,17 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 {
                     if self.structure_references_inbuf(&table) {
                         if !use_anon_liftime {
-                            name += "<'a, A>";
+                            name += enable_allocator_api.then_some("<'a, A>").unwrap_or("<'a>");
                         } else {
-                            name += "::<'_, A>";
+                            name += enable_allocator_api
+                                .then_some("::<'_, A>")
+                                .unwrap_or("::<'_>");
                         }
                     } else {
                         if !use_anon_liftime {
-                            name += "<A>";
+                            name += enable_allocator_api.then_some("<A>").unwrap_or("");
                         } else {
-                            name += "::<A>";
+                            name += enable_allocator_api.then_some("::<A>").unwrap_or("");
                         }
                     }
                 }
@@ -622,11 +639,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         }
     }
 
-    fn get_structure_selected_union_members(&self,
-                                            table: &StructureTable,
-                                            discriminant: &StructureTableEntryDiscriminantType,
-                                            selector: &UnionSelectorIteratorValue<'_>)
-                                            -> Vec<(usize, StructuresPartTablesUnionIndex, usize)> {
+    fn get_structure_selected_union_members(
+        &self,
+        table: &StructureTable,
+        discriminant: &StructureTableEntryDiscriminantType,
+        selector: &UnionSelectorIteratorValue<'_>,
+    ) -> Vec<(usize, StructuresPartTablesUnionIndex, usize)> {
         let mut selected_union_members = Vec::new();
         for u in discriminant.discriminated_union_members.iter() {
             let union_entry = &table.entries[*u];
@@ -661,6 +679,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         discriminant_member: usize,
         _make_public: bool,
         mut conditional: bool,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error> {
         let entry = &table.entries[discriminant_member];
         assert!(entry.deps.is_unconditional_true());
@@ -739,6 +758,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     base_type,
                                     plain_type.base_type_enable_conditional,
                                     false,
+                                    enable_allocator_api,
                                 );
                                 writeln!(out, "{}({}) = {},", name, type_spec, selector_value.0)?;
                             }
@@ -749,6 +769,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             array_type.resolved_element_type.as_ref().unwrap(),
                             array_type.element_type_enable_conditional,
                             false,
+                            enable_allocator_api,
                         );
                         writeln!(out, "{}({}) = {},", name, type_spec, selector_value.0)?;
                     }
@@ -775,6 +796,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         base_type,
                                         plain_type.base_type_enable_conditional,
                                         false,
+                                        enable_allocator_api,
                                     );
                                     writeln!(
                                         &mut iout,
@@ -790,6 +812,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 array_type.resolved_element_type.as_ref().unwrap(),
                                 array_type.element_type_enable_conditional,
                                 false,
+                                enable_allocator_api,
                             );
                             writeln!(
                                 &mut iout,
@@ -851,6 +874,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
         table: &StructureTable,
         conditional: bool,
+        enable_allocator_api: bool,
         enable_enum_transmute: bool,
         enable_in_place_unmarshal: bool,
         enable_in_place_into_bufs_owner: bool,
@@ -979,9 +1003,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
             let gen_params_spec = if contains_array {
                 if references_inbuf {
-                    ("<'a, A: Clone + Allocator>", "<'a, A>")
-                } else {
+                    if enable_allocator_api {
+                        ("<'a, A: Clone + Allocator>", "<'a, A>")
+                    } else {
+                        ("<'a>", "<'a>")
+                    }
+                } else if enable_allocator_api {
                     ("<A: Clone + Allocator>", "<A>")
+                } else {
+                    ("", "")
                 }
             } else {
                 ("", "")
@@ -999,6 +1029,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 discriminant_member,
                 definition_is_public,
                 conditional,
+                enable_allocator_api,
             )?;
             writeln!(out, "}}")?;
 
@@ -1035,6 +1066,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         discriminant_member,
                         false,
                         conditional,
+                        enable_allocator_api,
                     )?;
                 }
 
@@ -1051,6 +1083,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         discriminant_member,
                         false,
                         conditional,
+                        enable_allocator_api,
                         enable_enum_transmute,
                     )?;
                 }
@@ -1069,6 +1102,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         discriminant_member,
                         false,
                         conditional,
+                        enable_allocator_api,
                         enable_in_place_unmarshal,
                     )?;
                 }
@@ -1082,6 +1116,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         &mut iout,
                         table,
                         conditional,
+                        enable_allocator_api,
                         enable_in_place_unmarshal,
                     )?;
                 }
@@ -1099,6 +1134,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         &table_name,
                         discriminant_member,
                         conditional && discriminant.discriminant_type_conditional,
+                        enable_allocator_api,
                     )?;
                 }
 
@@ -1116,6 +1152,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         &table_name,
                         discriminant_member,
                         conditional && discriminant.discriminant_type_conditional,
+                        enable_allocator_api,
                         enable_in_place_into_bufs_owner,
                     )?;
 
@@ -1125,6 +1162,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             &mut iout,
                             table,
                             conditional && discriminant.discriminant_type_conditional,
+                            enable_allocator_api,
                             enable_in_place_into_bufs_owner,
                         )?;
                     }
@@ -1134,12 +1172,16 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
             if need_max_size_impl {
                 writeln!(out)?;
-                self.gen_structure_marshalled_max_size_impl(out, table, conditional)?;
+                self.gen_structure_marshalled_max_size_impl(
+                    out,
+                    table,
+                    conditional,
+                    enable_allocator_api,
+                )?;
             }
 
             if table_closure_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
-                let discriminant_type =
-                    discriminant.resolved_discriminant_type.as_ref().unwrap();
+                let discriminant_type = discriminant.resolved_discriminant_type.as_ref().unwrap();
                 if match discriminant_type {
                     StructureTableEntryResolvedDiscriminantType::Constants(index) => {
                         let discriminant_table = self.tables.structures.get_constants(*index);
@@ -1171,6 +1213,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         &table_name,
                         discriminant_member,
                         conditional && discriminant.discriminant_type_conditional,
+                        enable_allocator_api,
                         enable_enum_transmute,
                     )?;
                 }
@@ -1186,11 +1229,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     table,
                     discriminant_member,
                     false,
+                    enable_allocator_api,
                 )?;
             }
 
-            if table_closure_deps.any(ClosureDepsFlags::ANY_UNMARSHAL)
-                && enable_in_place_unmarshal
+            if table_closure_deps.any(ClosureDepsFlags::ANY_UNMARSHAL) && enable_in_place_unmarshal
             {
                 writeln!(out)?;
                 self.gen_tagged_union_layout_repr_struct(
@@ -1200,9 +1243,9 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     &table_name,
                     discriminant_member,
                     conditional,
+                    enable_allocator_api,
                 )?;
             }
-
         } else {
             if table_is_public {
                 write!(out, "pub ")?
@@ -1210,9 +1253,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
             let gen_params_spec = if need_definition && contains_array {
                 if references_inbuf {
-                    ("<'a, A: Clone + Allocator>", "<'a, A>")
-                } else {
+                    if enable_allocator_api {
+                        ("<'a, A: Clone + Allocator>", "<'a, A>")
+                    } else {
+                        ("<'a>", "<'a>")
+                    }
+                } else if enable_allocator_api {
                     ("<A: Clone + Allocator>", "<A>")
+                } else {
+                    ("", "")
                 }
             } else {
                 ("", "")
@@ -1256,6 +1305,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 plain_type.resolved_base_type.as_ref().unwrap(),
                                 enable_conditional,
                                 false,
+                                enable_allocator_api,
                             );
                             writeln!(&mut iout, "{}{}: {},", pub_spec, name, type_spec)?;
                         }
@@ -1309,6 +1359,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 array_type.resolved_element_type.as_ref().unwrap(),
                                 conditional | array_type.element_type_enable_conditional,
                                 false,
+                                enable_allocator_api,
                             );
                             writeln!(&mut iout, "{}{}: {},", pub_spec, name, type_spec)?;
                         }
@@ -1350,7 +1401,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         writeln!(&mut iout)?;
                     }
                     first = false;
-                    self.gen_structure_marshalled_size(&mut iout, table, conditional)?;
+                    self.gen_structure_marshalled_size(
+                        &mut iout,
+                        table,
+                        conditional,
+                        enable_allocator_api,
+                    )?;
                 }
 
                 if table_closure_deps.any(ClosureDepsFlags::ANY_MARSHAL) {
@@ -1358,7 +1414,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         writeln!(&mut iout)?;
                     }
                     first = false;
-                    self.gen_structure_marshal(&mut iout, table, conditional)?;
+                    self.gen_structure_marshal(
+                        &mut iout,
+                        table,
+                        conditional,
+                        enable_allocator_api,
+                    )?;
                 }
 
                 if table_closure_deps.any(ClosureDepsFlags::ANY_UNMARSHAL) {
@@ -1371,6 +1432,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         &mut iout,
                         table,
                         conditional,
+                        enable_allocator_api,
                         enable_in_place_unmarshal,
                     )?;
                 }
@@ -1384,6 +1446,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         &mut iout,
                         table,
                         conditional,
+                        enable_allocator_api,
                         enable_in_place_unmarshal,
                     )?;
                 }
@@ -1397,6 +1460,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         &mut iout,
                         table,
                         conditional,
+                        enable_allocator_api,
                     )?;
                 }
 
@@ -1410,6 +1474,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         &mut iout,
                         table,
                         conditional,
+                        enable_allocator_api,
                         enable_in_place_into_bufs_owner,
                     )?;
 
@@ -1419,6 +1484,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             &mut iout,
                             table,
                             conditional,
+                            enable_allocator_api,
                             enable_in_place_into_bufs_owner,
                         )?;
                     }
@@ -1429,7 +1495,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
             if need_max_size_impl {
                 writeln!(out)?;
-                self.gen_structure_marshalled_max_size_impl(out, table, conditional)?;
+                self.gen_structure_marshalled_max_size_impl(
+                    out,
+                    table,
+                    conditional,
+                    enable_allocator_api,
+                )?;
             }
 
             // Now define all discriminant members' corresponding enum types.
@@ -1502,9 +1573,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 let references_inbuf = self.tagged_union_references_inbuf(table, discriminant);
                 let gen_params_spec = if self.tagged_union_contains_array(table, discriminant) {
                     if self.tagged_union_references_inbuf(table, discriminant) {
-                        ("<'a, A: Clone + Allocator>", "<'a, A>")
-                    } else {
+                        if enable_allocator_api {
+                            ("<'a, A: Clone + Allocator>", "<'a, A>")
+                        } else {
+                            ("<'a>", "<'a>")
+                        }
+                    } else if enable_allocator_api {
                         ("<A: Clone + Allocator>", "<A>")
+                    } else {
+                        ("", "")
                     }
                 } else {
                     ("", "")
@@ -1537,6 +1614,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     j,
                     make_public,
                     conditional && discriminant.discriminant_type_conditional,
+                    enable_allocator_api,
                 )?;
                 writeln!(out, "}}")?;
 
@@ -1569,6 +1647,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             j,
                             true,
                             conditional && discriminant.discriminant_type_conditional,
+                            enable_allocator_api,
                         )?;
                     }
 
@@ -1585,6 +1664,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             j,
                             true,
                             conditional && discriminant.discriminant_type_conditional,
+                            enable_allocator_api,
                             enable_enum_transmute,
                         )?;
                     }
@@ -1603,6 +1683,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             j,
                             true,
                             conditional && discriminant.discriminant_type_conditional,
+                            enable_allocator_api,
                             enable_in_place_unmarshal,
                         )?;
                     }
@@ -1620,6 +1701,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             &type_name,
                             j,
                             conditional && discriminant.discriminant_type_conditional,
+                            enable_allocator_api,
                         )?;
                     }
 
@@ -1636,6 +1718,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             &type_name,
                             j,
                             conditional && discriminant.discriminant_type_conditional,
+                            enable_allocator_api,
                             enable_in_place_into_bufs_owner,
                         )?;
                     }
@@ -1643,40 +1726,57 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 }
 
                 if table_closure_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
-                    let discriminant_type = discriminant.resolved_discriminant_type.as_ref().unwrap();
+                    let discriminant_type =
+                        discriminant.resolved_discriminant_type.as_ref().unwrap();
                     if match discriminant_type {
                         StructureTableEntryResolvedDiscriminantType::Constants(index) => {
                             let discriminant_table = self.tables.structures.get_constants(*index);
-                            discriminant_table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION)
-                        },
+                            discriminant_table
+                                .closure_deps
+                                .any(ClosureDepsFlags::ANY_DEFINITION)
+                        }
                         StructureTableEntryResolvedDiscriminantType::Type(index) => {
                             let discriminant_table = self.tables.structures.get_type(*index);
-                            let discriminant_enable_conditional =
-                                conditional && discriminant.discriminant_type_conditional
+                            let discriminant_enable_conditional = conditional
+                                && discriminant.discriminant_type_conditional
                                 || discriminant.discriminant_type_enable_conditional;
                             if discriminant_enable_conditional {
-                                discriminant_table.closure_deps_conditional.any(ClosureDepsFlags::ANY_DEFINITION)
+                                discriminant_table
+                                    .closure_deps_conditional
+                                    .any(ClosureDepsFlags::ANY_DEFINITION)
                             } else {
-                                discriminant_table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION)
+                                discriminant_table
+                                    .closure_deps
+                                    .any(ClosureDepsFlags::ANY_DEFINITION)
                             }
-                        },
+                        }
                     } {
                         writeln!(out)?;
-                        self.gen_tagged_union_to_discriminant(out, table, &closure_deps,
-                                                              &type_name, j,
-                                                              conditional && discriminant.discriminant_type_conditional,
-                                                              enable_enum_transmute)?;
+                        self.gen_tagged_union_to_discriminant(
+                            out,
+                            table,
+                            &closure_deps,
+                            &type_name,
+                            j,
+                            conditional && discriminant.discriminant_type_conditional,
+                            enable_allocator_api,
+                            enable_enum_transmute,
+                        )?;
                     }
                 }
 
-                if conditional
-                    && table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION)
-                {
+                if conditional && table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
                     assert!(discriminant.discriminant_type_conditional);
                     // Emit conversion primitives between the conditional and non-conditional
                     // variants.
                     writeln!(out)?;
-                    self.gen_tagged_union_non_cond_cond_conversions(out, table, j, true)?;
+                    self.gen_tagged_union_non_cond_cond_conversions(
+                        out,
+                        table,
+                        j,
+                        true,
+                        enable_allocator_api,
+                    )?;
                 }
 
                 if closure_deps.any(ClosureDepsFlags::ANY_UNMARSHAL) && enable_in_place_unmarshal {
@@ -1688,6 +1788,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         &type_name,
                         j,
                         conditional,
+                        enable_allocator_api,
                     )?;
                 }
             }
@@ -1699,6 +1800,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         &self,
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
         index: StructuresPartTablesStructureIndex,
+        enable_allocator_api: bool,
         enable_enum_transmute: bool,
         enable_in_place_unmarshal: bool,
         enable_in_place_into_bufs_owner: bool,
@@ -1708,6 +1810,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             out,
             &table,
             false,
+            enable_allocator_api,
             enable_enum_transmute,
             enable_in_place_unmarshal,
             enable_in_place_into_bufs_owner,
@@ -1717,6 +1820,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 out,
                 &table,
                 true,
+                enable_allocator_api,
                 enable_enum_transmute,
                 enable_in_place_unmarshal,
                 enable_in_place_into_bufs_owner,

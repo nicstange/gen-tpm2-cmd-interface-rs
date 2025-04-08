@@ -17,6 +17,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         &self,
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
         index: StructuresPartTablesUnionIndex,
+        enable_allocator_api: bool,
     ) -> Result<(), io::Error> {
         let table = self.tables.structures.get_union(index);
         assert!(!table
@@ -145,6 +146,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             base_type,
                             enable_conditional,
                             size_type,
+                            enable_allocator_api,
                         );
                     // ::max() is non-const, open-code it.
                     let member_name = Self::uncamelize(&entry.name);
@@ -213,6 +215,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 element_type,
                                 enable_conditional,
                                 size_type,
+                                enable_allocator_api,
                             );
                         writeln!(
                             &mut iiiout,
@@ -275,6 +278,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         enable_conditional,
                         size_type,
                         &mut |out| writeln!(out, "return Err(());"),
+                        enable_allocator_api,
                     )?;
                     // ::max() is non-const, open-code it.
                     if member_max_size != member_max_size_name {
@@ -323,6 +327,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             enable_conditional,
                             size_type,
                             &mut |out| writeln!(out, "return Err(());"),
+                            enable_allocator_api,
                         )?;
                         writeln!(
                             &mut iiiout,
