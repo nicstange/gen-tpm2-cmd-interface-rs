@@ -284,7 +284,7 @@ pub fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{
                     &mut out,
                     "\
 #[allow(unused)]
-pub fn marshal_{}<'a>(buf: &mut [u8], value: {}) -> Result<&mut [u8], TpmErr> {{
+pub fn marshal_{}(buf: &mut [u8], value: {}) -> Result<&mut [u8], TpmErr> {{
 ",
                     &t, &t
                 )?;
