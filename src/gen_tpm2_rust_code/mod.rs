@@ -95,8 +95,6 @@ use core::mem;
 use core::ops;
 #[allow(unused_imports)]
 use core::ptr;
-#[cfg(feature = \"zeroize\")]
-use zeroize;
 
 #[derive(Clone, Copy, Debug)]
 pub enum TpmErr {{
