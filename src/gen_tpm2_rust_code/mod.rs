@@ -155,7 +155,10 @@ impl<'a{alloc_gen_param_spec}> TpmBuffer<'a{alloc_gen_param}> {{
     pub fn into_owned(mut self{alloc_param0}) -> Result<TpmBuffer<'static{alloc_gen_param}>, TpmErr> {{
         let o = match &mut self {{
             Self::Borrowed(b) => copy_vec_from_slice(b{alloc_param1})?,
-            Self::Owned(o) => mem::replace(o, Vec::{}({alloc_param0})),
+            Self::Owned(o) => {{
+                #[allow(clippy::mem_replace_with_default)]
+                mem::replace(o, Vec::{}({alloc_param0})),
+            }}
         }};
         Ok(TpmBuffer::<'static{alloc_gen_param}>::Owned(o))
     }}
