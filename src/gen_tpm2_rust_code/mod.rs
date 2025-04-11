@@ -81,12 +81,16 @@ use alloc::{{boxed, vec}};
         write!(
             &mut out,
             "\
+#[allow(unused_imports)]
 use vec::Vec;
+#[allow(unused_imports)]
 use boxed::Box;
+#[allow(unused_imports)]
 use core::cmp;
 use core::convert;
 use core::mem;
 use core::ops;
+#[allow(unused_imports)]
 use core::ptr;
 #[cfg(feature = \"zeroize\")]
 use zeroize;
@@ -111,6 +115,7 @@ pub enum TpmErr {{
             write!(
                 &mut out,
                 "
+#[allow(unused)]
 fn copy_vec_from_slice<T: Copy{alloc_gen_param_spec}>(slice: &[T]{alloc_param_spec}) -> Result<Vec<T{alloc_gen_param}>, TpmErr> {{
     let mut v = Vec::{}({alloc_param0});
     v.try_reserve_exact(slice.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;
@@ -124,6 +129,7 @@ fn copy_vec_from_slice<T: Copy{alloc_gen_param_spec}>(slice: &[T]{alloc_param_sp
             write!(
                 &mut out,
                 "
+#[allow(unused)]
 fn copy_vec_from_slice<T: Copy{alloc_gen_param_spec}>(slice: &[T]{alloc_param_spec}) -> Result<Vec<T{alloc_gen_param}>, TpmErr> {{
     let mut v = Vec::{}({alloc_param0});
     v.try_reserve_exact(slice.len()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?;
@@ -200,7 +206,10 @@ impl<'a{alloc_gen_param_spec}> PartialEq for TpmBuffer<'a{alloc_gen_param}> {{
         writeln!(&mut out)?;
         writeln!(
             &mut out,
-            "fn split_slice_at<T>(s: &[T], mid: usize) -> Result<(&[T], &[T]), TpmErr> {{"
+            "\
+#[allow(unused)]
+fn split_slice_at<T>(s: &[T], mid: usize) -> Result<(&[T], &[T]), TpmErr> {{
+"
         )?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "if s.len() < mid {{")?;
@@ -216,7 +225,10 @@ impl<'a{alloc_gen_param_spec}> PartialEq for TpmBuffer<'a{alloc_gen_param}> {{
         writeln!(&mut out)?;
         writeln!(
             &mut out,
-            "fn split_slice_at_mut<T>(s: &mut [T], mid: usize) -> Result<(&mut [T], &mut [T]), TpmErr> {{"
+            "\
+#[allow(unused)]
+fn split_slice_at_mut<T>(s: &mut [T], mid: usize) -> Result<(&mut [T], &mut [T]), TpmErr> {{
+"
         )?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "if s.len() < mid {{")?;
@@ -235,7 +247,10 @@ impl<'a{alloc_gen_param_spec}> PartialEq for TpmBuffer<'a{alloc_gen_param}> {{
                 writeln!(&mut out)?;
                 writeln!(
                     &mut out,
-                    "pub fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{",
+                    "\
+#[allow(unused)]
+pub fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{
+",
                     &t, &t
                 )?;
                 let mut iout = out.make_indent();
@@ -267,7 +282,10 @@ impl<'a{alloc_gen_param_spec}> PartialEq for TpmBuffer<'a{alloc_gen_param}> {{
                 writeln!(&mut out)?;
                 writeln!(
                     &mut out,
-                    "pub fn marshal_{}<'a>(buf: &mut [u8], value: {}) -> Result<&mut [u8], TpmErr> {{",
+                    "\
+#[allow(unused)]
+pub fn marshal_{}<'a>(buf: &mut [u8], value: {}) -> Result<&mut [u8], TpmErr> {{
+",
                     &t, &t
                 )?;
                 let mut iout = out.make_indent();
@@ -297,6 +315,7 @@ impl<'a{alloc_gen_param_spec}> PartialEq for TpmBuffer<'a{alloc_gen_param}> {{
             write!(
                 &mut out,
                 "
+#[allow(unused)]
 fn marshal_bytes<'a>(buf: &'a mut [u8], src: &[u8]) -> Result<&'a mut [u8], TpmErr> {{
     let (produced, buf) = split_slice_at_mut(buf, src.len())?;
     produced.copy_from_slice(src);
