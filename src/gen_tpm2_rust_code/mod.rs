@@ -179,7 +179,7 @@ impl<'a{alloc_gen_param_spec}> ops::Deref for TpmBuffer<'a{alloc_gen_param}> {{
     fn deref(&self) -> &Self::Target {{
         match self {{
             Self::Borrowed(b) => b,
-            Self::Owned(o) => &o,
+            Self::Owned(o) => o,
         }}
     }}
 }}
