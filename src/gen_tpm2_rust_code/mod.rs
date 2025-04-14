@@ -171,6 +171,7 @@ impl<'a{alloc_gen_param_spec}> Drop for TpmBuffer<'a{alloc_gen_param}> {{
         match self {{
             Self::Borrowed(_) => (),
             Self::Owned(o) => {{
+                #[cfg(feature = \"zeroize\")]
                 <[u8] as zeroize::Zeroize>::zeroize(o.as_mut_slice());
             }}
         }}
