@@ -48,7 +48,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
         let mut out = code_writer::CodeWriter::new(out);
         let mut out = out.make_writer();
-        write!(
+        writeln!(
             &mut out,
             "\
 // TCG TPM2 Structures interface code
@@ -158,8 +158,8 @@ impl<'a{alloc_gen_param_spec}> TpmBuffer<'a{alloc_gen_param}> {{
             Self::Borrowed(b) => copy_vec_from_slice(b{alloc_param1})?,
             Self::Owned(o) => {{
                 #[allow(clippy::mem_replace_with_default)]
-                mem::replace(o, Vec::{}({alloc_param0})),
-            }}
+                mem::replace(o, Vec::{}({alloc_param0}))
+            }},
         }};
         Ok(TpmBuffer::<'static{alloc_gen_param}>::Owned(o))
     }}
@@ -213,8 +213,7 @@ impl<'a{alloc_gen_param_spec}> PartialEq for TpmBuffer<'a{alloc_gen_param}> {{
             &mut out,
             "\
 #[allow(unused)]
-fn split_slice_at<T>(s: &[T], mid: usize) -> Result<(&[T], &[T]), TpmErr> {{
-"
+fn split_slice_at<T>(s: &[T], mid: usize) -> Result<(&[T], &[T]), TpmErr> {{"
         )?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "if s.len() < mid {{")?;
@@ -232,8 +231,7 @@ fn split_slice_at<T>(s: &[T], mid: usize) -> Result<(&[T], &[T]), TpmErr> {{
             &mut out,
             "\
 #[allow(unused)]
-fn split_slice_at_mut<T>(s: &mut [T], mid: usize) -> Result<(&mut [T], &mut [T]), TpmErr> {{
-"
+fn split_slice_at_mut<T>(s: &mut [T], mid: usize) -> Result<(&mut [T], &mut [T]), TpmErr> {{"
         )?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "if s.len() < mid {{")?;
@@ -254,8 +252,7 @@ fn split_slice_at_mut<T>(s: &mut [T], mid: usize) -> Result<(&mut [T], &mut [T])
                     &mut out,
                     "\
 #[allow(unused)]
-pub fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{
-",
+pub fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{",
                     &t, &t
                 )?;
                 let mut iout = out.make_indent();
@@ -289,8 +286,7 @@ pub fn unmarshal_{}(buf: &[u8]) -> Result<(&[u8], {}), TpmErr> {{
                     &mut out,
                     "\
 #[allow(unused)]
-pub fn marshal_{}(buf: &mut [u8], value: {}) -> Result<&mut [u8], TpmErr> {{
-",
+pub fn marshal_{}(buf: &mut [u8], value: {}) -> Result<&mut [u8], TpmErr> {{",
                     &t, &t
                 )?;
                 let mut iout = out.make_indent();
