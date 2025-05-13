@@ -200,6 +200,28 @@ impl<'a{alloc_gen_param_spec}> PartialEq for TpmBuffer<'a{alloc_gen_param}> {{
         <Self as ops::Deref>::deref(self) == <Self as ops::Deref>::deref(other)
     }}
 }}
+
+#[allow(unused)]
+pub fn box_try_new<T>(v: T) -> Result<Box<T>, ()> {{
+    // Box::try_new() is unstable, so do it by ourselves for now.
+    // Refer to https://doc.rust-lang.org/std/boxed/index.html#memory-layout.
+    let p: *mut T = if mem::size_of::<T>() == 0 {{
+        // Dangling pointers are valid for ZSTs and the write below is Ok.
+        ptr::NonNull::dangling().as_ptr()
+    }} else {{
+        let layout = alloc::alloc::Layout::new::<T>();
+        let p: *mut T = unsafe {{ alloc::alloc::alloc(layout) }} as *mut T;
+        if p.is_null() {{
+            return Err(());
+        }}
+        p
+    }};
+
+    unsafe {{ p.write(v) }};
+
+    Ok(unsafe {{ Box::from_raw(p) }})
+}}
+
 ",
             enable_allocator_api.then_some("new_in").unwrap_or("new"),
         )?;

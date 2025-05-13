@@ -2590,14 +2590,17 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             .unwrap();
 
         if enable_in_place_unmarshal {
-            writeln!(
-                &mut iout,
-                "let mut unmarshalled_uninit = match Box::<Self{}>::{} {{",
-                enable_allocator_api.then_some(", A").unwrap_or(""),
-                enable_allocator_api
-                    .then_some("try_new_uninit_in(alloc.clone())")
-                    .unwrap_or("try_new_uninit()")
-            )?;
+            if enable_allocator_api {
+                writeln!(
+                    &mut iout,
+                    "let mut unmarshalled_uninit = match Box::<Self, A>::try_new_uninit_in(alloc.clone()) {{",
+                )?;
+            } else {
+                writeln!(
+                    &mut iout,
+                    "let mut unmarshalled_uninit = match box_try_new(mem::MaybeUninit::<Self>::uninit()) {{",
+                )?;
+            }
             let mut iiout = iout.make_indent();
             writeln!(
                 &mut iiout,
@@ -2633,7 +2636,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             } else {
                 writeln!(
                     &mut iout,
-                    "let unmarshalled: Box<Self> = match Box::<Self>::try_new(unmarshalled) {{"
+                    "let unmarshalled: Box<Self> = match box_try_new(unmarshalled) {{"
                 )?;
             }
             let mut iiout = iout.make_indent();
