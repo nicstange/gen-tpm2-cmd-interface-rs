@@ -294,7 +294,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 if enable_allocator_api {
                     ("<'a, A: Clone + Allocator>", "<'a, A>")
                 } else {
-                    ("<'a", "<'a>")
+                    ("<'a>", "<'a>")
                 }
             } else if enable_allocator_api {
                 ("<A: Clone + Allocator>", "<A>")

@@ -19,7 +19,7 @@ use structures::table_common::ClosureDepsFlags;
 use structures::tables::UnionSelectorIterator;
 use structures::value_range::ValueRange;
 
-use super::super::{code_writer, Tpm2InterfaceRustCodeGenerator};
+use super::super::{Tpm2InterfaceRustCodeGenerator, code_writer};
 
 impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     pub(in super::super) fn structure_has_fixed_size(table: &StructureTable) -> (bool, bool) {
@@ -1276,8 +1276,14 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             entry,
                         );
                         let type_spec = Self::camelize(&type_spec);
-                        let type_spec = if self.tagged_union_contains_array(table, discriminant) {
-                            type_spec + "::<'_, A>"
+                        let type_spec = if self.tagged_union_contains_array(table, discriminant)
+                            && enable_allocator_api
+                        {
+                            if self.tagged_union_references_inbuf(table, discriminant) {
+                                type_spec + "::<'_, A>"
+                            } else {
+                                type_spec + "::<A>"
+                            }
                         } else {
                             type_spec
                         };
@@ -1290,9 +1296,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         )
                     };
 
-                    writeln!(out,
-                             "let {}selector_size = match usize::try_from({}::marshalled_selector_size()) {{",
-                             &member_name, type_spec)?;
+                    writeln!(
+                        out,
+                        "let {}selector_size = match usize::try_from({}::marshalled_selector_size()) {{",
+                        &member_name, type_spec
+                    )?;
                     let mut iout = out.make_indent();
                     writeln!(
                         &mut iout,

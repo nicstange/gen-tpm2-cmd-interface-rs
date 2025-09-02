@@ -21,7 +21,7 @@ use structures::tables::{
 };
 use structures::union_table::{UnionTable, UnionTableEntryType};
 
-use super::{code_writer, Tpm2InterfaceRustCodeGenerator};
+use super::{Tpm2InterfaceRustCodeGenerator, code_writer};
 
 mod into_bufs_owner_impl;
 mod marshal_impl;
@@ -377,12 +377,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         &self,
         element_type: &StructureTableEntryResolvedBaseType,
         conditional: bool,
-        use_anon_liftime: bool,
+        use_anon_lifetime: bool,
         enable_allocator_api: bool,
     ) -> String {
         if let StructureTableEntryResolvedBaseType::Predefined(predefined) = element_type {
             if predefined.bits == 8 && !predefined.signed {
-                if !use_anon_liftime {
+                if !use_anon_lifetime {
                     if enable_allocator_api {
                         return "TpmBuffer<'a, A>".to_owned();
                     } else {
@@ -392,7 +392,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     if enable_allocator_api {
                         return "TpmBuffer::<'_, A>".to_owned();
                     } else {
-                        return "TpmBuffer::<'_>".to_owned();
+                        return "TpmBuffer".to_owned();
                     }
                 }
             }
@@ -402,7 +402,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             + &self.format_structure_member_plain_type(
                 element_type,
                 conditional,
-                use_anon_liftime,
+                use_anon_lifetime,
                 enable_allocator_api,
             )
             + enable_allocator_api.then_some(", A").unwrap_or("")
@@ -413,7 +413,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         &self,
         plain_type: &StructureTableEntryResolvedBaseType,
         conditional: bool,
-        use_anon_liftime: bool,
+        use_anon_lifetime: bool,
         enable_allocator_api: bool,
     ) -> borrow::Cow<str> {
         match plain_type {
@@ -453,18 +453,16 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     && self.structure_contains_array(&table)
                 {
                     if self.structure_references_inbuf(&table) {
-                        if !use_anon_liftime {
-                            name += enable_allocator_api.then_some("<'a, A>").unwrap_or("<'a>");
-                        } else {
-                            name += enable_allocator_api
-                                .then_some("::<'_, A>")
-                                .unwrap_or("::<'_>");
+                        if !use_anon_lifetime {
+                            name += enable_allocator_api.then_some("<'a, A>").unwrap_or("<'a>")
+                        } else if enable_allocator_api {
+                            name += "::<'_, A>";
                         }
-                    } else {
-                        if !use_anon_liftime {
-                            name += enable_allocator_api.then_some("<A>").unwrap_or("");
+                    } else if enable_allocator_api {
+                        if !use_anon_lifetime {
+                            name += "<A>";
                         } else {
-                            name += enable_allocator_api.then_some("::<A>").unwrap_or("");
+                            name += "::<A>";
                         }
                     }
                 }
@@ -1332,10 +1330,18 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             let type_spec = Self::camelize(&type_spec);
                             let gen_params_spec =
                                 if self.tagged_union_contains_array(table, discriminant) {
-                                    if self.tagged_union_references_inbuf(table, discriminant) {
-                                        "<'a, A>"
+                                    if enable_allocator_api {
+                                        if self.tagged_union_references_inbuf(table, discriminant) {
+                                            "<'a, A>"
+                                        } else {
+                                            "<A>"
+                                        }
                                     } else {
-                                        "<A>"
+                                        if self.tagged_union_references_inbuf(table, discriminant) {
+                                            "<'a>"
+                                        } else {
+                                            ""
+                                        }
                                     }
                                 } else {
                                     ""

@@ -222,6 +222,11 @@ pub fn box_try_new<T>(v: T) -> Result<Box<T>, ()> {{
     Ok(unsafe {{ Box::from_raw(p) }})
 }}
 
+#[allow(unused)]
+pub fn box_into_inner<T>(b: Box<T>) -> T {{
+    // Box::into_inner() is unstable, so do it by ourselves for now.
+    *b
+}}
 ",
             enable_allocator_api.then_some("new_in").unwrap_or("new"),
         )?;

@@ -15,7 +15,7 @@ use structures::structure_table::{
 use structures::table_common::ClosureDepsFlags;
 use structures::tables::UnionSelectorIterator;
 
-use super::super::{code_writer, Tpm2InterfaceRustCodeGenerator};
+use super::super::{Tpm2InterfaceRustCodeGenerator, code_writer};
 
 impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     pub(super) fn gen_structure_into_bufs_owner_intern<W: io::Write>(
@@ -201,11 +201,23 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         "for element in {}_orig.drain(..) {{",
                                         name
                                     )?;
-                                    writeln!(
-                                        &mut iiout.make_indent(),
-                                        "let _ = {}.push_within_capacity(element.into_bufs_owner_intern({})?);",
-                                        name, enable_allocator_api.then_some("alloc").unwrap_or("")
-                                    )?;
+                                    if enable_allocator_api {
+                                        // Vec::push_within_capacity() is unstable, once it's been
+                                        // stabilized, this if-branch will become universally
+                                        // applicable.
+                                        writeln!(
+                                            &mut iiout.make_indent(),
+                                            "let _ = {}.push_within_capacity(element.into_bufs_owner_intern({})?);",
+                                            name,
+                                            enable_allocator_api.then_some("alloc").unwrap_or("")
+                                        )?;
+                                    } else {
+                                        writeln!(
+                                            &mut iiout.make_indent(),
+                                            "let _ = {}.push(element.into_bufs_owner_intern()?);",
+                                            name,
+                                        )?;
+                                    }
                                     writeln!(&mut iiout, "}}")?;
                                     if !deps.is_unconditional_true() {
                                         writeln!(&mut iout, "}}")?;
@@ -357,9 +369,14 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                     writeln!(
                                         &mut iiout,
                                         "self.{} = mem::replace(&mut self.{}, TpmBuffer::Owned(Vec::{}))).into_owned({})?;",
-                                        name, name,
-                                        enable_allocator_api.then_some("new_in(alloc.clone())").unwrap_or("new()"),
-                                        enable_allocator_api.then_some("alloc.clone()").unwrap_or("")
+                                        name,
+                                        name,
+                                        enable_allocator_api
+                                            .then_some("new_in(alloc.clone())")
+                                            .unwrap_or("new()"),
+                                        enable_allocator_api
+                                            .then_some("alloc.clone()")
+                                            .unwrap_or("")
                                     )?;
                                     if !deps.is_unconditional_true() {
                                         writeln!(&mut iout, "}}")?;
@@ -483,8 +500,8 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             writeln!(
                 out,
                 "fn into_bufs_owner_intern(self{}) -> Result<{}<'static{}>, TpmErr> {{",
-                tagged_union_name,
                 enable_allocator_api.then_some(", alloc: &A").unwrap_or(""),
+                tagged_union_name,
                 enable_allocator_api.then_some(", A").unwrap_or("")
             )?;
             let mut iout = out.make_indent();
@@ -613,11 +630,25 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                             "for element in {}_orig.drain(..) {{",
                                             union_entry_name
                                         )?;
-                                        writeln!(
-                                            &mut iiiout.make_indent(),
-                                            "let _ = {}.push_within_capacity(element.into_bufs_owner_intern({})?);",
-                                            union_entry_name, enable_allocator_api.then_some("alloc").unwrap_or("")
-                                        )?;
+                                        if enable_allocator_api {
+                                            // Vec::push_within_capacity() is unstable, once it's been
+                                            // stabilized, this if-branch will become universally
+                                            // applicable.
+                                            writeln!(
+                                                &mut iiiout.make_indent(),
+                                                "let _ = {}.push_within_capacity(element.into_bufs_owner_intern({})?);",
+                                                union_entry_name,
+                                                enable_allocator_api
+                                                    .then_some("alloc")
+                                                    .unwrap_or("")
+                                            )?;
+                                        } else {
+                                            writeln!(
+                                                &mut iiiout.make_indent(),
+                                                "let _ = {}.push(element.into_bufs_owner_intern()?);",
+                                                union_entry_name,
+                                            )?;
+                                        }
                                         writeln!(&mut iiiout, "}}")?;
                                     }
                                 }
@@ -765,9 +796,14 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         writeln!(
                                             &mut iiiout,
                                             "*{} = mem::replace({}, TpmBuffer::Owned(Vec::{})).into_owned({})?;",
-                                            union_entry_name, union_entry_name,
-                                            enable_allocator_api.then_some("new_in(alloc.clone())").unwrap_or("new()"),
-                                            enable_allocator_api.then_some("alloc.clone()").unwrap_or("")
+                                            union_entry_name,
+                                            union_entry_name,
+                                            enable_allocator_api
+                                                .then_some("new_in(alloc.clone())")
+                                                .unwrap_or("new()"),
+                                            enable_allocator_api
+                                                .then_some("alloc.clone()")
+                                                .unwrap_or("")
                                         )?;
                                     }
                                 }
@@ -839,22 +875,42 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     enable_allocator_api.then_some(", A").unwrap_or("")
                 )?;
                 let mut iout = out.make_indent();
-                writeln!(&mut iout, "this.into_bufs_owner_intern(alloc)")?;
+                writeln!(
+                    &mut iout,
+                    "this.into_bufs_owner_intern({})",
+                    enable_allocator_api.then_some("alloc").unwrap_or("")
+                )?;
                 writeln!(out, "}}")?;
             } else {
-                writeln!(out, "pub fn into_bufs_owner(this: Box<Self{0}>{1}) -> Result<Box<{2}<'static{0}>{0}>, TpmErr> {{",
-                         enable_allocator_api.then_some(", A").unwrap_or(""),
-                         enable_allocator_api.then_some(", alloc: &A").unwrap_or(""),
-                         table_name,
+                writeln!(
+                    out,
+                    "pub fn into_bufs_owner(this: Box<Self{0}>{1}) -> Result<Box<{2}<'static{0}>{0}>, TpmErr> {{",
+                    enable_allocator_api.then_some(", A").unwrap_or(""),
+                    enable_allocator_api.then_some(", alloc: &A").unwrap_or(""),
+                    table_name,
                 )?;
                 let mut iout = out.make_indent();
-                writeln!(&mut iout, "let this = Box::into_inner(this);")?;
-                writeln!(&mut iout,
-                         "Ok(Box::{}(this.into_bufs_owner_intern({})?{}).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
-                         enable_allocator_api.then_some("try_new_in").unwrap_or("try_new"),
-                         enable_allocator_api.then_some("alloc").unwrap_or(""),
-                         enable_allocator_api.then_some(", alloc.clone()").unwrap_or("")
-                )?;
+                writeln!(&mut iout, "let this = box_into_inner(this);")?;
+                if enable_allocator_api {
+                    // Box::try_new() is unstable, once it's been stabilized, this if-branch will
+                    // become universally applicable.
+                    writeln!(
+                        &mut iout,
+                        "Ok(Box::{}(this.into_bufs_owner_intern({})?{}).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                        enable_allocator_api
+                            .then_some("try_new_in")
+                            .unwrap_or("try_new"),
+                        enable_allocator_api.then_some("alloc").unwrap_or(""),
+                        enable_allocator_api
+                            .then_some(", alloc.clone()")
+                            .unwrap_or("")
+                    )?;
+                } else {
+                    writeln!(
+                        &mut iout,
+                        "Ok(box_try_new(this.into_bufs_owner_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                    )?;
+                }
                 writeln!(out, "}}")?;
             }
         } else if !self_is_boxed {
@@ -866,7 +922,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 enable_allocator_api.then_some(", A").unwrap_or("")
             )?;
             let mut iout = out.make_indent();
-            writeln!(&mut iout, "this.into_bufs_owner_intern(alloc)?;")?;
+            writeln!(
+                &mut iout,
+                "this.into_bufs_owner_intern({})?;",
+                enable_allocator_api.then_some("alloc").unwrap_or("")
+            )?;
             writeln!(
                 &mut iout,
                 "Ok(unsafe {{ mem::transmute::<Self, {}<'static{}>>(this) }})",
@@ -875,10 +935,19 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             )?;
             writeln!(out, "}}")?;
         } else {
-            writeln!(out, "pub fn into_bufs_owner(mut this: Box<Self, A>, alloc: &A) -> Result<Box<{}<'static, A>, A>, TpmErr> {{",
-                     table_name)?;
+            writeln!(
+                out,
+                "pub fn into_bufs_owner(mut this: Box<Self{0}>{1}) -> Result<Box<{2}<'static{0}>{0}>, TpmErr> {{",
+                enable_allocator_api.then_some(", A").unwrap_or(""),
+                enable_allocator_api.then_some(", alloc: &A").unwrap_or(""),
+                table_name
+            )?;
             let mut iout = out.make_indent();
-            writeln!(&mut iout, "this.into_bufs_owner_intern(alloc)?;")?;
+            writeln!(
+                &mut iout,
+                "this.into_bufs_owner_intern({})?;",
+                enable_allocator_api.then_some("A").unwrap_or("")
+            )?;
             writeln!(
                 &mut iout,
                 "Ok(unsafe {{ mem::transmute::<Box<Self{0}>, Box<{1}<'static{0}>{0}>>(this) }})",

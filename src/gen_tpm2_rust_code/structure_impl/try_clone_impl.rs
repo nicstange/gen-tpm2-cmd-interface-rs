@@ -14,7 +14,7 @@ use structures::structure_table::{
 use structures::table_common::ClosureDepsFlags;
 use structures::tables::UnionSelectorIterator;
 
-use super::super::{code_writer, Tpm2InterfaceRustCodeGenerator};
+use super::super::{Tpm2InterfaceRustCodeGenerator, code_writer};
 
 impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     #[allow(clippy::too_many_arguments)]
@@ -49,12 +49,6 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         }
 
         let tagged_union_name = Self::camelize(tagged_union_name);
-
-        let pub_spec = if closure_deps.any(ClosureDepsFlags::EXTERN_TRY_CLONE) {
-            "pub "
-        } else {
-            ""
-        };
 
         let contains_array = self.tagged_union_contains_array(table, discriminant);
         let references_inbuf =
@@ -201,11 +195,23 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                         "for element in {}_orig.iter() {{",
                                         union_entry_name
                                     )?;
-                                    writeln!(
-                                        &mut iiiout.make_indent(),
-                                        "let _ = {}.push_within_capacity(element.try_clone_intern({})?);",
-                                        union_entry_name, enable_allocator_api.then_some("alloc").unwrap_or("")
-                                    )?;
+                                    if enable_allocator_api {
+                                        // Vec::push_within_capacity() is unstable, once it's been
+                                        // stabilized, this if-branch will become universally
+                                        // applicable.
+                                        writeln!(
+                                            &mut iiiout.make_indent(),
+                                            "let _ = {}.push_within_capacity(element.try_clone_intern({})?);",
+                                            union_entry_name,
+                                            enable_allocator_api.then_some("alloc").unwrap_or("")
+                                        )?;
+                                    } else {
+                                        writeln!(
+                                            &mut iiiout.make_indent(),
+                                            "let _ = {}.push(element.try_clone_intern()?);",
+                                            union_entry_name,
+                                        )?;
+                                    }
                                     writeln!(&mut iiiout, "}}")?;
                                 } else {
                                     writeln!(
@@ -305,26 +311,37 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 writeln!(
                     out,
                     "pub fn try_clone{}(&self{}) -> Result<Box<{}{}>, TpmErr> {{",
+                    params_spec.0,
+                    params_spec.1,
                     result_spec.0,
-                    enable_allocator_api
-                        .then_some("<B: Clone + Allocator>")
-                        .unwrap_or(""),
-                    enable_allocator_api.then_some(", alloc: &B").unwrap_or(""),
-                    enable_allocator_api.then_some(", B").unwrap_or(""),
+                    if enable_allocator_api { ", B" } else { "" }
                 )?;
-                writeln!(
-                    &mut out.make_indent(),
-                    "Ok(Box::{}(self.try_clone_intern({})?{}).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
-                    enable_allocator_api.then_some("try_new_in").unwrap_or("try_new"),
-                    params_spec.2,
-                    enable_allocator_api.then_some(", alloc").unwrap_or("")
-                )?;
+                if enable_allocator_api {
+                    // Box::try_new() is unstable, once it's been stabilized, this if-branch will
+                    // become universally applicable.
+                    writeln!(
+                        &mut out.make_indent(),
+                        "Ok(Box::{}(self.try_clone_intern({})?{}).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                        enable_allocator_api
+                            .then_some("try_new_in")
+                            .unwrap_or("try_new"),
+                        params_spec.2,
+                        enable_allocator_api
+                            .then_some(", alloc.clone()")
+                            .unwrap_or("")
+                    )?;
+                } else {
+                    writeln!(
+                        &mut out.make_indent(),
+                        "Ok(box_try_new(self.try_clone_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                    )?;
+                }
                 writeln!(out, "}}")?;
             } else {
                 writeln!(
                     out,
-                    "{}fn try_clone{}(&self{}) -> Result<{}, TpmErr> {{",
-                    pub_spec, params_spec.0, params_spec.1, result_spec.0
+                    "pub fn try_clone{}(&self{}) -> Result<{}, TpmErr> {{",
+                    params_spec.0, params_spec.1, result_spec.0,
                 )?;
                 writeln!(
                     &mut out.make_indent(),
@@ -434,7 +451,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         if self.structure_contains_array(&structure_table) {
                             writeln!(
                                 &mut iiout,
-                                "let mut {} = Vec::{});",
+                                "let mut {} = Vec::{};",
                                 name,
                                 enable_allocator_api
                                     .then_some("new_in(alloc.clone()")
@@ -446,12 +463,23 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                                 name, name
                             )?;
                             writeln!(&mut iout, "for element in self.{}.iter() {{", name)?;
-                            writeln!(
-                                &mut iout.make_indent(),
-                                "let _ = {}.push_within_capacity(element.try_clone_intern({})?);",
-                                name,
-                                enable_allocator_api.then_some("alloc").unwrap_or("")
-                            )?;
+                            if enable_allocator_api {
+                                // Vec::push_within_capacity() is unstable, once it's been
+                                // stabilized, this if-branch will become universally
+                                // applicable.
+                                writeln!(
+                                    &mut iout.make_indent(),
+                                    "let _ = {}.push_within_capacity(element.try_clone_intern({})?);",
+                                    name,
+                                    enable_allocator_api.then_some("alloc").unwrap_or("")
+                                )?;
+                            } else {
+                                writeln!(
+                                    &mut iout.make_indent(),
+                                    "let _ = {}.push(element.try_clone_intern()?);",
+                                    name,
+                                )?;
+                            }
                             writeln!(&mut iout, "}}")?;
                         } else {
                             writeln!(
@@ -596,18 +624,31 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 writeln!(
                     out,
                     "pub fn try_clone{}(&self{}) -> Result<Box<{}{}>, TpmErr> {{",
-                    enable_allocator_api
-                        .then_some("<B: Clone + Allocator>")
-                        .unwrap_or(""),
-                    enable_allocator_api.then_some(", alloc: &B").unwrap_or(""),
+                    params_spec.0,
+                    params_spec.1,
                     result_spec.0,
-                    enable_allocator_api.then_some(", B").unwrap_or("")
+                    if enable_allocator_api { ", B" } else { "" }
                 )?;
-                writeln!(
-                    &mut out.make_indent(),
-                    "Ok(Box::try_new_in(self.try_clone_intern({})?, alloc.clone()).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
-                    params_spec.2
-                )?;
+                if enable_allocator_api {
+                    // Box::try_new() is unstable, once it's been stabilized, this if-branch will
+                    // become universally applicable.
+                    writeln!(
+                        &mut out.make_indent(),
+                        "Ok(Box::{}(self.try_clone_intern({})?{}).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                        enable_allocator_api
+                            .then_some("try_new_in")
+                            .unwrap_or("try_new"),
+                        params_spec.2,
+                        enable_allocator_api
+                            .then_some(", alloc.clone()")
+                            .unwrap_or("")
+                    )?;
+                } else {
+                    writeln!(
+                        &mut out.make_indent(),
+                        "Ok(box_try_new(self.try_clone_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                    )?;
+                }
                 writeln!(out, "}}")?;
             } else {
                 writeln!(
