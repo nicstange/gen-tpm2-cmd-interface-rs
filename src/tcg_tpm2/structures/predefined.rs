@@ -140,7 +140,7 @@ impl<'a> PredefinedConstant<'a> {
     }
 }
 
-static PREDEFINED_CONSTANTS: [PredefinedConstant; 32] = [
+static PREDEFINED_CONSTANTS: [PredefinedConstant; 36] = [
     PredefinedConstant {
         name: "HASH_COUNT",
         value_type: "uint32_t",
@@ -158,6 +158,12 @@ static PREDEFINED_CONSTANTS: [PredefinedConstant; 32] = [
         value_type: "uint16_t",
         sizeof_deps: None,
         predefined_constant_deps: Some(&["MAX_DIGEST_SIZE", "MAX_ECC_KEY_BYTES"]),
+    },
+    PredefinedConstant {
+        name: "MAX_2B_BUFFER_SIZE",
+        value_type: "uint16_t",
+        sizeof_deps: None,
+        predefined_constant_deps: None,
     },
     PredefinedConstant {
         name: "MAX_ACTIVE_SESSIONS",
@@ -268,10 +274,22 @@ static PREDEFINED_CONSTANTS: [PredefinedConstant; 32] = [
         predefined_constant_deps: Some(&["MAX_CAP_DATA"]),
     },
     PredefinedConstant {
+        name: "MAX_PUB_KEYS",
+        value_type: "uint32_t",
+        sizeof_deps: Some(&["TPM2B_PUBLIC"]),
+        predefined_constant_deps: Some(&["MAX_CAP_DATA"]),
+    },
+    PredefinedConstant {
         name: "MAX_RSA_KEY_BYTES",
         value_type: "uint16_t",
         sizeof_deps: None,
         predefined_constant_deps: None,
+    },
+    PredefinedConstant {
+        name: "MAX_SPDM_SESSION_INFO",
+        value_type: "uint32_t",
+        sizeof_deps: Some(&["TPMS_SPDM_SESSION_INFO"]),
+        predefined_constant_deps: Some(&["MAX_CAP_DATA"]),
     },
     PredefinedConstant {
         name: "MAX_SYM_BLOCK_SIZE",
@@ -301,6 +319,12 @@ static PREDEFINED_CONSTANTS: [PredefinedConstant; 32] = [
         name: "MAX_TPM_PROPERTIES",
         value_type: "uint32_t",
         sizeof_deps: Some(&["TPMS_TAGGED_PROPERTY"]),
+        predefined_constant_deps: Some(&["MAX_CAP_DATA"]),
+    },
+    PredefinedConstant {
+        name: "MAX_VENDOR_PROPERTY",
+        value_type: "uint32_t",
+        sizeof_deps: Some(&["TPM2B_VENDOR_PROPERTY"]),
         predefined_constant_deps: Some(&["MAX_CAP_DATA"]),
     },
     PredefinedConstant {

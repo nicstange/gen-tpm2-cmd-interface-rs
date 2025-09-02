@@ -13,7 +13,7 @@ use structures::predefined::{
 use structures::table_common::{ClosureDeps, ClosureDepsFlags};
 use structures::tables::StructuresPartTablesIndex;
 
-use super::{code_writer, Tpm2InterfaceRustCodeGenerator};
+use super::{Tpm2InterfaceRustCodeGenerator, code_writer};
 
 impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     pub(super) fn gen_limits_def<W: io::Write>(
@@ -97,6 +97,10 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     self.gen_predefined_max_ecc_key_bytes(&mut iiout, &t, &deps)?
                 }
                 "MAX_PCR_PROPERTIES" => self.gen_predefined_max_pcr_properties(&mut iiout, &t)?,
+                "MAX_PUB_KEYS" => self.gen_predefined_max_pub_keys(&mut iiout, &t)?,
+                "MAX_SPDM_SESSION_INFO" => {
+                    self.gen_predefined_max_spdm_session_info(&mut iiout, &t)?
+                }
                 "MAX_SYM_BLOCK_SIZE" => {
                     self.gen_predefined_max_sym_block_size(&mut iiout, &t, &deps)?
                 }
@@ -106,6 +110,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 }
                 "MAX_TAGGED_POLICIES" => self.gen_predefined_max_tagged_policies(&mut iiout, &t)?,
                 "MAX_TPM_PROPERTIES" => self.gen_predefined_max_tpm_properties(&mut iiout, &t)?,
+                "MAX_VENDOR_PROPERTY" => self.gen_predefined_max_vendor_property(&mut iiout, &t)?,
                 "PCR_SELECT_MAX" => self.gen_predefined_pcr_select_max(&mut iiout, &t)?,
                 "PCR_SELECT_MIN" => self.gen_predefined_pcr_select_min(&mut iiout, &t)?,
                 _ => {
@@ -162,7 +167,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
         let name = format!("sizeof_{}", type_id.to_ascii_lowercase());
         let (sizeof_ref, primitive) = if can_fail {
-            writeln!(out, "let {} = {}?;)", &name, sizeof_ref)?;
+            writeln!(out, "let {} = {}?;", &name, sizeof_ref)?;
             (name, true)
         } else {
             (sizeof_ref, primitive)
@@ -891,6 +896,132 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         Ok(())
     }
 
+    fn gen_predefined_max_pub_keys<W: io::Write>(
+        &self,
+        out: &mut code_writer::IndentedCodeWriter<'_, W>,
+        target_type: &PredefinedTypeRef,
+    ) -> Result<(), io::Error> {
+        let name = "max_pcr_properties";
+
+        let (max_cap_data, max_cap_data_t) =
+            self.gen_predefined_body_predefined_constant_ref(out, "MAX_CAP_DATA")?;
+        let (sz_tpm2b_public, sz_tpm2b_public_t, sz_tpm2b_public_p) =
+            self.gen_predefined_body_sizeof_ref(out, "TPM2B_PUBLIC", Some(max_cap_data_t))?;
+
+        let common_t = PredefinedTypes::find_common_type(max_cap_data_t, sz_tpm2b_public_t)
+            .ok_or_else(|| {
+                eprintln!(
+                    "error: {}: failed to find common type for limit computation",
+                    name
+                );
+                io::Error::from(io::ErrorKind::InvalidData)
+            })?;
+        let (max_cap_data, max_cap_data_p) = self.gen_predefined_body_cast(
+            out,
+            common_t,
+            "max_cap_data".to_owned(),
+            max_cap_data,
+            max_cap_data_t,
+            true,
+        )?;
+        let (sz_tpm2b_public, _sz_tpm2b_public_p) = self.gen_predefined_body_cast(
+            out,
+            common_t,
+            "sizeof_tpm2b_public".to_owned(),
+            sz_tpm2b_public,
+            sz_tpm2b_public_t,
+            sz_tpm2b_public_p,
+        )?;
+
+        let max_cap_data = if max_cap_data_p {
+            max_cap_data
+        } else {
+            "(".to_owned() + &max_cap_data + ")"
+        };
+
+        writeln!(
+            out,
+            "let {} = {}.checked_div({}).ok_or(())?;",
+            name, max_cap_data, sz_tpm2b_public
+        )?;
+        let (result, _) = self.gen_predefined_body_cast(
+            out,
+            *target_type,
+            name.to_owned(),
+            name.to_owned(),
+            common_t,
+            true,
+        )?;
+        writeln!(out, "Ok({})", result)?;
+        Ok(())
+    }
+
+    fn gen_predefined_max_spdm_session_info<W: io::Write>(
+        &self,
+        out: &mut code_writer::IndentedCodeWriter<'_, W>,
+        target_type: &PredefinedTypeRef,
+    ) -> Result<(), io::Error> {
+        let name = "max_pcr_properties";
+
+        let (max_cap_data, max_cap_data_t) =
+            self.gen_predefined_body_predefined_constant_ref(out, "MAX_CAP_DATA")?;
+        let (sz_tpms_spdm_session_info, sz_tpms_spdm_session_info_t, sz_tpms_spdm_session_info_p) =
+            self.gen_predefined_body_sizeof_ref(
+                out,
+                "TPMS_SPDM_SESSION_INFO",
+                Some(max_cap_data_t),
+            )?;
+
+        let common_t =
+            PredefinedTypes::find_common_type(max_cap_data_t, sz_tpms_spdm_session_info_t)
+                .ok_or_else(|| {
+                    eprintln!(
+                        "error: {}: failed to find common type for limit computation",
+                        name
+                    );
+                    io::Error::from(io::ErrorKind::InvalidData)
+                })?;
+        let (max_cap_data, max_cap_data_p) = self.gen_predefined_body_cast(
+            out,
+            common_t,
+            "max_cap_data".to_owned(),
+            max_cap_data,
+            max_cap_data_t,
+            true,
+        )?;
+        let (sz_tpms_spdm_session_info, _sz_tpms_spdm_session_info_p) = self
+            .gen_predefined_body_cast(
+                out,
+                common_t,
+                "sizeof_tpms_spdm_session_info".to_owned(),
+                sz_tpms_spdm_session_info,
+                sz_tpms_spdm_session_info_t,
+                sz_tpms_spdm_session_info_p,
+            )?;
+
+        let max_cap_data = if max_cap_data_p {
+            max_cap_data
+        } else {
+            "(".to_owned() + &max_cap_data + ")"
+        };
+
+        writeln!(
+            out,
+            "let {} = {}.checked_div({}).ok_or(())?;",
+            name, max_cap_data, sz_tpms_spdm_session_info
+        )?;
+        let (result, _) = self.gen_predefined_body_cast(
+            out,
+            *target_type,
+            name.to_owned(),
+            name.to_owned(),
+            common_t,
+            true,
+        )?;
+        writeln!(out, "Ok({})", result)?;
+        Ok(())
+    }
+
     fn gen_predefined_max_sym_block_size<W: io::Write>(
         &self,
         out: &mut code_writer::IndentedCodeWriter<'_, W>,
@@ -1204,6 +1335,72 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             out,
             "let {} = {}.checked_div({}).ok_or(())?;",
             name, max_cap_data, sz_tpms_tagged_property
+        )?;
+        let (result, _) = self.gen_predefined_body_cast(
+            out,
+            *target_type,
+            name.to_owned(),
+            name.to_owned(),
+            common_t,
+            true,
+        )?;
+        writeln!(out, "Ok({})", result)?;
+        Ok(())
+    }
+
+    fn gen_predefined_max_vendor_property<W: io::Write>(
+        &self,
+        out: &mut code_writer::IndentedCodeWriter<'_, W>,
+        target_type: &PredefinedTypeRef,
+    ) -> Result<(), io::Error> {
+        let name = "max_pcr_properties";
+
+        let (max_cap_data, max_cap_data_t) =
+            self.gen_predefined_body_predefined_constant_ref(out, "MAX_CAP_DATA")?;
+        let (sz_tpm2b_vendor_property, sz_tpm2b_vendor_property_t, sz_tpm2b_vendor_property_p) =
+            self.gen_predefined_body_sizeof_ref(
+                out,
+                "TPM2B_VENDOR_PROPERTY",
+                Some(max_cap_data_t),
+            )?;
+
+        let common_t =
+            PredefinedTypes::find_common_type(max_cap_data_t, sz_tpm2b_vendor_property_t)
+                .ok_or_else(|| {
+                    eprintln!(
+                        "error: {}: failed to find common type for limit computation",
+                        name
+                    );
+                    io::Error::from(io::ErrorKind::InvalidData)
+                })?;
+        let (max_cap_data, max_cap_data_p) = self.gen_predefined_body_cast(
+            out,
+            common_t,
+            "max_cap_data".to_owned(),
+            max_cap_data,
+            max_cap_data_t,
+            true,
+        )?;
+        let (sz_tpm2b_vendor_property, _sz_tpm2b_vendor_property_p) = self
+            .gen_predefined_body_cast(
+                out,
+                common_t,
+                "sizeof_tpm2b_vendor_property".to_owned(),
+                sz_tpm2b_vendor_property,
+                sz_tpm2b_vendor_property_t,
+                sz_tpm2b_vendor_property_p,
+            )?;
+
+        let max_cap_data = if max_cap_data_p {
+            max_cap_data
+        } else {
+            "(".to_owned() + &max_cap_data + ")"
+        };
+
+        writeln!(
+            out,
+            "let {} = {}.checked_div({}).ok_or(())?;",
+            name, max_cap_data, sz_tpm2b_vendor_property
         )?;
         let (result, _) = self.gen_predefined_body_cast(
             out,
