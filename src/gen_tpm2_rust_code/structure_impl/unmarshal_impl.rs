@@ -867,7 +867,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             let elements_need_drop = self.structure_plain_member_needs_drop(element_type);
             writeln!(
                 out,
-                "let mut unmarshalled_{}: Vec<{}{}> = Vec::{}",
+                "let mut unmarshalled_{}: Vec<{}{}> = Vec::{};",
                 member_name,
                 type_spec,
                 enable_allocator_api.then_some(", A").unwrap_or(""),
