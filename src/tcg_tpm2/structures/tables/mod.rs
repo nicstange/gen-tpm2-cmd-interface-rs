@@ -803,16 +803,6 @@ impl StructuresPartTables {
                                     continue;
                                 }
 
-                                if closure_deps
-                                    .intersects(ClosureDepsFlags::ANY_DEFINITION.complement())
-                                {
-                                    eprintln!(
-                                        "error: non-definition dependency on \"{}\" type alias",
-                                        &entry.name
-                                    );
-                                    return Err(io::Error::from(io::ErrorKind::InvalidData));
-                                }
-
                                 matched_some = true;
                                 let mut config_deps = t.structures_info.deps.clone();
                                 config_deps.merge_from(&entry.deps);
@@ -820,6 +810,8 @@ impl StructuresPartTables {
                                 drop(t);
                                 let mut t = self.get_aliases_mut(index);
                                 let entry = &mut t.entries[j];
+                                let closure_deps =
+                                    closure_deps.intersection(ClosureDepsFlags::ANY_DEFINITION);
                                 entry
                                     .closure_deps
                                     .insert(borrow::Cow::Owned(config_deps), closure_deps);
@@ -841,19 +833,11 @@ impl StructuresPartTables {
                             continue;
                         }
 
-                        if closure_deps.intersects(
-                            ClosureDepsFlags::ANY_TRY_CLONE
-                                | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
-                        ) {
-                            eprintln!(
-                                "error: try-clone/into-buffers-owner dependency on \"{}\" bits type",
-                                &t.name
-                            );
-                            return Err(io::Error::from(io::ErrorKind::InvalidData));
-                        }
-
                         matched_some = true;
                         let config_deps = borrow::Cow::Owned(t.structures_info.deps.clone());
+                        let closure_deps = closure_deps.difference(
+                            ClosureDepsFlags::ANY_TRY_CLONE | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
+                        );
                         t.closure_deps.insert(config_deps, closure_deps);
                     }
                 }
@@ -867,19 +851,15 @@ impl StructuresPartTables {
                             continue;
                         }
 
+                        let closure_deps = closure_deps.difference(
+                            ClosureDepsFlags::ANY_TRY_CLONE | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
+                        );
                         if t.resolved_base.is_none()
                             && closure_deps
                                 .intersects(ClosureDepsFlags::ANY_DEFINITION.complement())
                         {
-                            eprintln!("error: table {}: non-definition dependency on constants type with no base",
-                                     &t.name);
-                            return Err(io::Error::from(io::ErrorKind::InvalidData));
-                        } else if closure_deps.intersects(
-                            ClosureDepsFlags::ANY_TRY_CLONE
-                                | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
-                        ) {
                             eprintln!(
-                                "error: try-clone/into-buffers-owner dependency on \"{}\" constants type",
+                                "error: table {}: non-definition dependency on constants type with no base",
                                 &t.name
                             );
                             return Err(io::Error::from(io::ErrorKind::InvalidData));
@@ -901,15 +881,6 @@ impl StructuresPartTables {
                                         continue;
                                     }
 
-                                    if closure_deps
-                                        .intersects(ClosureDepsFlags::ANY_DEFINITION.complement())
-                                    {
-                                        eprintln!
-                                            ("error: table {}: non-definition dependency on individual \"{}\" constant",
-                                             &t.name, &entry.name);
-                                        return Err(io::Error::from(io::ErrorKind::InvalidData));
-                                    }
-
                                     matched_some = true;
                                     let mut config_deps = t.structures_info.deps.clone();
                                     config_deps.merge_from(&entry.deps);
@@ -917,6 +888,9 @@ impl StructuresPartTables {
                                     drop(t);
                                     let mut t = self.get_constants_mut(index);
                                     let entry = &mut t.entries[j];
+                                    // For individual constants, only a defintition dep makes any sense.
+                                    let closure_deps =
+                                        closure_deps.intersection(ClosureDepsFlags::ANY_DEFINITION);
                                     entry
                                         .closure_deps
                                         .insert(borrow::Cow::Owned(config_deps), closure_deps);
@@ -939,19 +913,11 @@ impl StructuresPartTables {
                             continue;
                         }
 
-                        if closure_deps.intersects(
-                            ClosureDepsFlags::ANY_TRY_CLONE
-                                | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
-                        ) {
-                            eprintln!(
-                                "error: try-clone/into-buffers-owner dependency on \"{}\" type",
-                                &t.name
-                            );
-                            return Err(io::Error::from(io::ErrorKind::InvalidData));
-                        }
-
                         matched_some = true;
                         let config_deps = borrow::Cow::Owned(t.structures_info.deps.clone());
+                        let closure_deps = closure_deps.difference(
+                            ClosureDepsFlags::ANY_TRY_CLONE | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
+                        );
                         if !for_cond {
                             t.closure_deps.insert(config_deps, closure_deps);
                         } else {
@@ -988,16 +954,10 @@ impl StructuresPartTables {
                             continue;
                         }
 
-                        if closure_deps.intersects(ClosureDepsFlags::ANY_MAX_SIZE.complement()) {
-                            eprintln!(
-                                "error: table {}: non-sizeof() dependency on union type",
-                                &t.name
-                            );
-                            return Err(io::Error::from(io::ErrorKind::InvalidData));
-                        }
-
                         matched_some = true;
                         let config_deps = borrow::Cow::Owned(t.structures_info.deps.clone());
+                        let closure_deps =
+                            closure_deps.intersection(ClosureDepsFlags::ANY_MAX_SIZE);
                         t.max_size_deps.insert(config_deps, closure_deps);
                     }
                 }
@@ -1364,10 +1324,7 @@ impl StructuresPartTables {
                 borrow::Cow::Owned(ConfigDeps::new()),
                 ClosureDepsFlags::PRIVATE_DEFINITION,
             );
-            for error_rc in [
-                "TPM_RC_INSUFFICIENT",
-                "TPM_RC_MEMORY",
-            ] {
+            for error_rc in ["TPM_RC_INSUFFICIENT", "TPM_RC_MEMORY"] {
                 match self.lookup_constant(error_rc) {
                     Some(error_rc) => {
                         propagate_error_rc_deps(
@@ -1393,26 +1350,26 @@ impl StructuresPartTables {
              table_error_rc: Option<StructuresPartTablesConstantIndex>,
              alternative_error_rc: &str,
              container_deps: borrow::Cow<ClosureDeps>| {
-                 if container_deps.is_empty() {
-                     return Ok(());
-                 }
-                 let error_rc = if let Some(error_rc) = table_error_rc {
-                     error_rc
-                 } else {
-                     match self.lookup_constant(alternative_error_rc) {
-                         Some(error_rc) => error_rc,
-                         None => {
-                             eprintln!(
-                                 "error: table {}: no definition of {}",
-                                 table_name, alternative_error_rc
-                             );
-                             return Err(io::Error::from(io::ErrorKind::InvalidData));
-                         }
-                     }
-                 };
-                 propagate_error_rc_deps(worklist, error_rc, container_deps);
-                 Ok(())
-             };
+                if container_deps.is_empty() {
+                    return Ok(());
+                }
+                let error_rc = if let Some(error_rc) = table_error_rc {
+                    error_rc
+                } else {
+                    match self.lookup_constant(alternative_error_rc) {
+                        Some(error_rc) => error_rc,
+                        None => {
+                            eprintln!(
+                                "error: table {}: no definition of {}",
+                                table_name, alternative_error_rc
+                            );
+                            return Err(io::Error::from(io::ErrorKind::InvalidData));
+                        }
+                    }
+                };
+                propagate_error_rc_deps(worklist, error_rc, container_deps);
+                Ok(())
+            };
 
         while !worklist.is_empty() {
             let mut wl = worklist.drain();
@@ -1588,7 +1545,8 @@ impl StructuresPartTables {
                      table_name: &str,
                      predefined_constants_deps: &mut HashMap<&str, ClosureDeps>,
                      entry: &UnionTableEntry,
-                     container_deps: borrow::Cow<ClosureDeps>| -> Result<(), io::Error> {
+                     container_deps: borrow::Cow<ClosureDeps>|
+                     -> Result<(), io::Error> {
                         assert!(container_deps.are_all_configs_limited(&entry.deps));
                         match &entry.entry_type {
                             UnionTableEntryType::Plain(plain_type) => {
@@ -1638,10 +1596,15 @@ impl StructuresPartTables {
 
                                 let container_deps = container_deps.mod_all_closure_deps(
                                     ClosureDepsFlags::empty(),
-                                    ClosureDepsFlags::ANY_MARSHAL.complement()
+                                    ClosureDepsFlags::ANY_MARSHAL.complement(),
                                 );
-                                propagate_error_rc_deps(worklist, table_name,
-                                                        None, "TPM_RC_SIZE", container_deps)?;
+                                propagate_error_rc_deps(
+                                    worklist,
+                                    table_name,
+                                    None,
+                                    "TPM_RC_SIZE",
+                                    container_deps,
+                                )?;
                             }
                         };
                         Ok(())
@@ -1722,8 +1685,13 @@ impl StructuresPartTables {
                                 ClosureDepsFlags::empty(),
                                 ClosureDepsFlags::ANY_UNMARSHAL.complement(),
                             );
-                            propagate_error_rc_deps(&mut worklist, &t.name,
-                                                    None, "TPM_RC_RESERVED_BITS", container_deps)?;
+                            propagate_error_rc_deps(
+                                &mut worklist,
+                                &t.name,
+                                None,
+                                "TPM_RC_RESERVED_BITS",
+                                container_deps,
+                            )?;
                         }
                     }
                     StructuresPartTablesIndex::Constants(index) => {
@@ -1782,12 +1750,13 @@ impl StructuresPartTables {
                         // Propagate dependencies to the unmarshalling error code as needed. Note
                         // that for enum-like ANY_DEFINITION constants, a TryFrom<> implementation
                         // will be provided.
-                        if t.closure_deps.any(ClosureDepsFlags::ANY_UNMARSHAL) ||
-                            (t.enum_like && t.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION))
+                        if t.closure_deps.any(ClosureDepsFlags::ANY_UNMARSHAL)
+                            || (t.enum_like && t.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION))
                         {
                             let container_deps = borrow::Cow::Borrowed(&t.closure_deps);
                             let container_deps = if t.enum_like
-                                && container_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
+                                && container_deps.any(ClosureDepsFlags::ANY_DEFINITION)
+                            {
                                 // For enum-like constants with an ANY_DEFINTION dependency, a
                                 // TryFrom<> implementation will be provided.
                                 container_deps.mod_all_closure_deps(
@@ -1797,16 +1766,20 @@ impl StructuresPartTables {
                             } else {
                                 container_deps.mod_all_closure_deps(
                                     ClosureDepsFlags::empty(),
-                                    ClosureDepsFlags::ANY_UNMARSHAL.complement()
+                                    ClosureDepsFlags::ANY_UNMARSHAL.complement(),
                                 )
                             };
                             let container_deps = borrow::Cow::Owned(container_deps.into_owned());
                             let table_name = t.name.clone();
                             let table_error_rc = t.resolved_error_rc;
                             drop(t);
-                            propagate_error_rc_deps(&mut worklist, &table_name,
-                                                    table_error_rc, "TPM_RC_VALUE",
-                                                    container_deps)?;
+                            propagate_error_rc_deps(
+                                &mut worklist,
+                                &table_name,
+                                table_error_rc,
+                                "TPM_RC_VALUE",
+                                container_deps,
+                            )?;
                         }
                     }
                     StructuresPartTablesIndex::Type(index) => {
@@ -1858,11 +1831,12 @@ impl StructuresPartTables {
                         // Propagate dependencies to the unmarshalling error code as needed. Note
                         // that for enum-like ANY_DEFINITION constants, a TryFrom<> implementation
                         // will be provided.
-                        if container_deps.any(ClosureDepsFlags::ANY_UNMARSHAL) ||
-                            (t.enum_like && t.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION))
+                        if container_deps.any(ClosureDepsFlags::ANY_UNMARSHAL)
+                            || (t.enum_like && t.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION))
                         {
                             let container_deps = if t.enum_like
-                                && container_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
+                                && container_deps.any(ClosureDepsFlags::ANY_DEFINITION)
+                            {
                                 // For enum-like constants with an ANY_DEFINTION dependency, a
                                 // TryFrom<> implementation will be provided.
                                 container_deps.mod_all_closure_deps(
@@ -1872,12 +1846,16 @@ impl StructuresPartTables {
                             } else {
                                 container_deps.mod_all_closure_deps(
                                     ClosureDepsFlags::empty(),
-                                    ClosureDepsFlags::ANY_UNMARSHAL.complement()
+                                    ClosureDepsFlags::ANY_UNMARSHAL.complement(),
                                 )
                             };
-                            propagate_error_rc_deps(&mut worklist, &t.name,
-                                                    t.resolved_error_rc, "TPM_RC_VALUE",
-                                                    container_deps)?;
+                            propagate_error_rc_deps(
+                                &mut worklist,
+                                &t.name,
+                                t.resolved_error_rc,
+                                "TPM_RC_VALUE",
+                                container_deps,
+                            )?;
                         }
                     }
                     StructuresPartTablesIndex::Structure(index) => {
@@ -1896,8 +1874,10 @@ impl StructuresPartTables {
                                         } else {
                                             borrow::Cow::Owned(ClosureDeps::empty())
                                         };
-                                    assert!(container_deps_conditional
-                                        .are_all_configs_limited(&t.structures_info.deps));
+                                    assert!(
+                                        container_deps_conditional
+                                            .are_all_configs_limited(&t.structures_info.deps)
+                                    );
                                     let container_deps_conditional =
                                         container_deps_conditional.limit_config_scopes(&entry.deps);
                                     propagate_deps_to_member(
@@ -1915,8 +1895,10 @@ impl StructuresPartTables {
                                     } else {
                                         borrow::Cow::Owned(ClosureDeps::empty())
                                     };
-                                    assert!(container_deps
-                                        .are_all_configs_limited(&t.structures_info.deps));
+                                    assert!(
+                                        container_deps
+                                            .are_all_configs_limited(&t.structures_info.deps)
+                                    );
                                     let container_deps =
                                         container_deps.limit_config_scopes(&entry.deps);
                                     propagate_deps_to_member(
@@ -1942,8 +1924,13 @@ impl StructuresPartTables {
                                             borrow::Cow::Borrowed(container_deps.borrow()),
                                         );
 
-                                        propagate_error_rc_deps(&mut worklist, &t.name,
-                                                                t.resolved_error_rc, "TPM_RC_VALUE", container_deps)?;
+                                        propagate_error_rc_deps(
+                                            &mut worklist,
+                                            &t.name,
+                                            t.resolved_error_rc,
+                                            "TPM_RC_VALUE",
+                                            container_deps,
+                                        )?;
                                     }
                                     if plain_type.is_size_specifier {
                                         let container_deps =
@@ -1952,8 +1939,13 @@ impl StructuresPartTables {
                                             ClosureDepsFlags::empty(),
                                             ClosureDepsFlags::ANY_UNMARSHAL.complement(),
                                         );
-                                        propagate_error_rc_deps(&mut worklist, &t.name,
-                                                                t.resolved_error_rc, "TPM_RC_SIZE", container_deps)?;
+                                        propagate_error_rc_deps(
+                                            &mut worklist,
+                                            &t.name,
+                                            t.resolved_error_rc,
+                                            "TPM_RC_SIZE",
+                                            container_deps,
+                                        )?;
 
                                         let container_deps =
                                             t.closure_deps.union(&t.closure_deps_conditional);
@@ -1961,8 +1953,13 @@ impl StructuresPartTables {
                                             ClosureDepsFlags::empty(),
                                             ClosureDepsFlags::ANY_MARSHAL.complement(),
                                         );
-                                        propagate_error_rc_deps(&mut worklist, &t.name,
-                                                                None, "TPM_RC_SIZE", container_deps)?;
+                                        propagate_error_rc_deps(
+                                            &mut worklist,
+                                            &t.name,
+                                            None,
+                                            "TPM_RC_SIZE",
+                                            container_deps,
+                                        )?;
                                     }
                                 }
                                 StructureTableEntryType::Discriminant(discriminant) => {
@@ -1978,8 +1975,10 @@ impl StructuresPartTables {
                                     } else {
                                         borrow::Cow::Owned(ClosureDeps::empty())
                                     };
-                                    assert!(container_deps_conditional
-                                        .are_all_configs_limited(&t.structures_info.deps));
+                                    assert!(
+                                        container_deps_conditional
+                                            .are_all_configs_limited(&t.structures_info.deps)
+                                    );
                                     let container_deps_conditional =
                                         container_deps_conditional.limit_config_scopes(&entry.deps);
 
@@ -1992,8 +1991,10 @@ impl StructuresPartTables {
                                     } else {
                                         borrow::Cow::Owned(ClosureDeps::empty())
                                     };
-                                    assert!(container_deps
-                                        .are_all_configs_limited(&t.structures_info.deps));
+                                    assert!(
+                                        container_deps
+                                            .are_all_configs_limited(&t.structures_info.deps)
+                                    );
                                     let container_deps =
                                         container_deps.limit_config_scopes(&entry.deps);
 
@@ -2005,7 +2006,7 @@ impl StructuresPartTables {
                                     // propagated to the respective type though.
                                     for (container_deps, to_conditional) in [
                                         (&container_deps, false),
-                                        (&container_deps_conditional, true)
+                                        (&container_deps_conditional, true),
                                     ] {
                                         if container_deps.is_empty() {
                                             continue;
@@ -2017,8 +2018,8 @@ impl StructuresPartTables {
                                             discriminant.resolved_discriminant_type.unwrap();
                                         let size_deps = ClosureDepsFlags::ANY_SIZE
                                             | ClosureDepsFlags::ANY_MAX_SIZE;
-                                        let container_size_deps =
-                                            container_deps.mod_all_closure_deps(
+                                        let container_size_deps = container_deps
+                                            .mod_all_closure_deps(
                                                 ClosureDepsFlags::empty(),
                                                 size_deps.complement(),
                                             );
@@ -2028,28 +2029,29 @@ impl StructuresPartTables {
                                             &StructureTableEntryResolvedBaseType::from(
                                                 discriminant_type,
                                             ),
-                                            borrow::Cow::Borrowed(
-                                                &*container_size_deps,
-                                            ),
+                                            borrow::Cow::Borrowed(&*container_size_deps),
                                             to_conditional,
                                         );
 
-                                        let container_deps = container_deps
-                                            .mod_all_closure_deps(
-                                                ClosureDepsFlags::empty(),
-                                                size_deps
-                                                    | ClosureDepsFlags::ANY_TRY_CLONE
-                                                    | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
-                                            );
+                                        let container_deps = container_deps.mod_all_closure_deps(
+                                            ClosureDepsFlags::empty(),
+                                            size_deps
+                                                | ClosureDepsFlags::ANY_TRY_CLONE
+                                                | ClosureDepsFlags::ANY_INTO_BUFS_OWNER,
+                                        );
 
                                         if container_deps.any(ClosureDepsFlags::ANY_UNMARSHAL) {
                                             // Propagate any unmarshal deps to the discriminant base type's
                                             // recorded RC value constant.
-                                            let container_deps = container_deps.mod_all_closure_deps(
-                                                ClosureDepsFlags::empty(),
-                                                ClosureDepsFlags::ANY_UNMARSHAL.complement(),
-                                            );
-                                            let base_type = discriminant.resolved_discriminant_type.as_ref().unwrap();
+                                            let container_deps = container_deps
+                                                .mod_all_closure_deps(
+                                                    ClosureDepsFlags::empty(),
+                                                    ClosureDepsFlags::ANY_UNMARSHAL.complement(),
+                                                );
+                                            let base_type = discriminant
+                                                .resolved_discriminant_type
+                                                .as_ref()
+                                                .unwrap();
                                             let error_rc = match base_type {
                                                 StructureTableEntryResolvedDiscriminantType::Constants(i) => {
                                                     let constants_table = self.get_constants(*i);
@@ -2060,8 +2062,13 @@ impl StructuresPartTables {
                                                     type_table.resolved_error_rc
                                                 }
                                             };
-                                            propagate_error_rc_deps(&mut worklist, &t.name,
-                                                                    error_rc, "TPM_RC_VALUE", container_deps)?;
+                                            propagate_error_rc_deps(
+                                                &mut worklist,
+                                                &t.name,
+                                                error_rc,
+                                                "TPM_RC_VALUE",
+                                                container_deps,
+                                            )?;
                                         }
 
                                         let container_deps = container_deps
@@ -2092,13 +2099,10 @@ impl StructuresPartTables {
                                                         .get_enum_type_member_constant(entry_index)
                                                 }
                                             };
-                                            let container_deps =
-                                                container_deps
-                                                    .limit_config_scopes(selector.config_deps());
-                                            enum_constants_deps.push((
-                                                selector_value,
-                                                container_deps.clone(),
-                                            ));
+                                            let container_deps = container_deps
+                                                .limit_config_scopes(selector.config_deps());
+                                            enum_constants_deps
+                                                .push((selector_value, container_deps.clone()));
                                         }
                                         for dep in enum_constants_deps.drain(..) {
                                             propagate_constant_deps(&mut worklist, dep.0, dep.1);
@@ -2153,7 +2157,7 @@ impl StructuresPartTables {
 
                                         for (container_deps, to_conditional) in [
                                             (&container_deps, false),
-                                            (&container_deps_conditional, true)
+                                            (&container_deps_conditional, true),
                                         ] {
                                             if container_deps.is_empty() {
                                                 continue;
@@ -2202,8 +2206,10 @@ impl StructuresPartTables {
                                         } else {
                                             borrow::Cow::Owned(ClosureDeps::empty())
                                         };
-                                    assert!(container_deps_conditional
-                                        .are_all_configs_limited(&t.structures_info.deps));
+                                    assert!(
+                                        container_deps_conditional
+                                            .are_all_configs_limited(&t.structures_info.deps)
+                                    );
                                     let container_deps_conditional =
                                         container_deps_conditional.limit_config_scopes(&entry.deps);
                                     propagate_deps_to_member(
@@ -2221,8 +2227,10 @@ impl StructuresPartTables {
                                     } else {
                                         borrow::Cow::Owned(ClosureDeps::empty())
                                     };
-                                    assert!(container_deps
-                                        .are_all_configs_limited(&t.structures_info.deps));
+                                    assert!(
+                                        container_deps
+                                            .are_all_configs_limited(&t.structures_info.deps)
+                                    );
                                     let container_deps =
                                         container_deps.limit_config_scopes(&entry.deps);
                                     propagate_deps_to_member(
@@ -2236,8 +2244,10 @@ impl StructuresPartTables {
                                     // Now handle the size expression and the allowed size range, if any.
                                     let container_deps =
                                         t.closure_deps.union(&t.closure_deps_conditional);
-                                    assert!(container_deps
-                                        .are_all_configs_limited(&t.structures_info.deps));
+                                    assert!(
+                                        container_deps
+                                            .are_all_configs_limited(&t.structures_info.deps)
+                                    );
                                     let container_deps =
                                         container_deps.limit_config_scopes(&entry.deps);
                                     // The size is relevant only to
@@ -2283,16 +2293,26 @@ impl StructuresPartTables {
                                             ClosureDepsFlags::empty(),
                                             ClosureDepsFlags::ANY_UNMARSHAL.complement(),
                                         );
-                                        propagate_error_rc_deps(&mut worklist, &t.name,
-                                                                t.resolved_error_rc, "TPM_RC_SIZE", container_deps)?;
+                                        propagate_error_rc_deps(
+                                            &mut worklist,
+                                            &t.name,
+                                            t.resolved_error_rc,
+                                            "TPM_RC_SIZE",
+                                            container_deps,
+                                        )?;
                                     }
 
                                     let container_deps = container_deps.mod_all_closure_deps(
                                         ClosureDepsFlags::empty(),
                                         ClosureDepsFlags::ANY_MARSHAL.complement(),
                                     );
-                                    propagate_error_rc_deps(&mut worklist, &t.name,
-                                                            None, "TPM_RC_SIZE", container_deps)?;
+                                    propagate_error_rc_deps(
+                                        &mut worklist,
+                                        &t.name,
+                                        None,
+                                        "TPM_RC_SIZE",
+                                        container_deps,
+                                    )?;
                                 }
                             };
                         }
@@ -2300,8 +2320,10 @@ impl StructuresPartTables {
                     StructuresPartTablesIndex::Union(index) => {
                         let t = self.get_union(index);
                         let max_size_container_deps = &t.max_size_deps;
-                        assert!(max_size_container_deps
-                            .are_all_configs_limited(&t.structures_info.deps));
+                        assert!(
+                            max_size_container_deps
+                                .are_all_configs_limited(&t.structures_info.deps)
+                        );
                         if !max_size_container_deps.is_empty() {
                             for entry in t.entries.iter() {
                                 let selector_deps = {
