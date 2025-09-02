@@ -990,11 +990,19 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 }
             };
 
-            writeln!(
-                out,
-                "#[repr(C, {})]",
-                Self::predefined_type_to_rust(discriminant_base)
-            )?;
+            if enable_enum_transmute || enable_in_place_unmarshal {
+                writeln!(
+                    out,
+                    "#[repr(C, {})]",
+                    Self::predefined_type_to_rust(discriminant_base)
+                )?;
+            } else {
+                writeln!(
+                    out,
+                    "#[repr({})]",
+                    Self::predefined_type_to_rust(discriminant_base)
+                )?;
+            }
             if table_is_public {
                 write!(out, "pub ")?
             }
@@ -1602,11 +1610,19 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     writeln!(out, "#[derive(Debug, PartialEq)]")?;
                 }
 
-                writeln!(
-                    out,
-                    "#[repr(C, {})]",
-                    Self::predefined_type_to_rust(discriminant_base)
-                )?;
+                if enable_enum_transmute || enable_in_place_unmarshal {
+                    writeln!(
+                        out,
+                        "#[repr(C, {})]",
+                        Self::predefined_type_to_rust(discriminant_base)
+                    )?;
+                } else {
+                    writeln!(
+                        out,
+                        "#[repr({})]",
+                        Self::predefined_type_to_rust(discriminant_base)
+                    )?;
+                }
                 let pub_spec = if make_public { "pub " } else { "" };
                 writeln!(
                     out,
