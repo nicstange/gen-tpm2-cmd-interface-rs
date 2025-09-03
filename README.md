@@ -3,7 +3,8 @@ Generate TCG TPM2 interface code in Rust.
 
 `gen-tpm2-cmd-interface` takes the Command/Response, Type and Algorithm tables as extracted from the TCG TPM2 Library
 PDFs by [`extract-tpm2-spec-tables`](https://github.com/nicstange/extract-tpm2-spec-tables) as input and produces
-corresponding interface code in Rust.
+corresponding interface code in Rust. For example output, c.f. the
+[generated-tpm2-interface-184-full repo](https://github.com/nicstange/generated-tpm2-interface-184-full).
 
 ## Features
 - The set of generated type definitions as well as related (un)marshalling code for each is completely under user
