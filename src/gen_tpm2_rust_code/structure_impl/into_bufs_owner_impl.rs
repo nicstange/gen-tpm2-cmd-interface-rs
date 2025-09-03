@@ -896,7 +896,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     // become universally applicable.
                     writeln!(
                         &mut iout,
-                        "Ok(Box::{}(this.into_bufs_owner_intern({})?{}).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                        "Box::{}(this.into_bufs_owner_intern({})?{}).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))",
                         enable_allocator_api
                             .then_some("try_new_in")
                             .unwrap_or("try_new"),
@@ -908,7 +908,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 } else {
                     writeln!(
                         &mut iout,
-                        "Ok(box_try_new(this.into_bufs_owner_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))?)",
+                        "box_try_new(this.into_bufs_owner_intern()?).map_err(|_| TpmErr::Rc(TpmRc::MEMORY))",
                     )?;
                 }
                 writeln!(out, "}}")?;

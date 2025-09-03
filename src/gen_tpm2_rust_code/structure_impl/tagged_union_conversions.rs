@@ -9,7 +9,7 @@ use structures::structure_table::{StructureTable, StructureTableEntryResolvedDis
 use structures::table_common::{ClosureDeps, ClosureDepsFlags};
 use structures::tables::UnionSelectorIterator;
 
-use super::super::{code_writer, Tpm2InterfaceRustCodeGenerator};
+use super::super::{Tpm2InterfaceRustCodeGenerator, code_writer};
 
 impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     #[allow(clippy::too_many_arguments)]

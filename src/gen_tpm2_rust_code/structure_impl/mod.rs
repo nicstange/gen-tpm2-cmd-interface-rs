@@ -964,6 +964,10 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             writeln!(out, "#[cfg({})]", Self::format_deps(&table_deps))?;
         }
 
+        if !need_definition {
+            writeln!(out, "#[allow(unused)]")?;
+        }
+
         if !contains_array {
             assert!(!references_inbuf);
             writeln!(out, "#[derive(Clone, Copy, Debug, PartialEq, Eq)]")?;

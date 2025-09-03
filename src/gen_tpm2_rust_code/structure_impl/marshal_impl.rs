@@ -18,7 +18,7 @@ use structures::structure_table::{
 use structures::table_common::ClosureDepsFlags;
 use structures::tables::{UnionSelectorIterator, UnionSelectorIteratorValue};
 
-use super::super::{code_writer, Tpm2InterfaceRustCodeGenerator};
+use super::super::{Tpm2InterfaceRustCodeGenerator, code_writer};
 
 impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     pub(in super::super) fn structure_marshal_needs_limits(table: &StructureTable) -> bool {
@@ -102,10 +102,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         // equals what is expected from the specificiation.
         match array_size.value.as_ref().unwrap() {
             ExprValue::CompiletimeConstant(_) | ExprValue::RuntimeConstant(_) => {
-                let error_rc_size = self
-                    .tables
-                    .structures
-                    .lookup_constant("TPM_RC_SIZE");
+                let error_rc_size = self.tables.structures.lookup_constant("TPM_RC_SIZE");
 
                 let len_spec = if is_byte_array { "size" } else { "len" };
 
@@ -214,10 +211,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             pub_spec, buf_lifetime, buf_lifetime, limits_arg, buf_lifetime
         )?;
 
-        let error_rc_size = self
-            .tables
-            .structures
-            .lookup_constant("TPM_RC_SIZE");
+        let error_rc_size = self.tables.structures.lookup_constant("TPM_RC_SIZE");
 
         let array_size_specifier_members = Self::find_structure_array_size_specifier_members(table);
         let lookup_array_size_specifier_member =
@@ -246,16 +240,20 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 match &array_type.size.op {
                     ExprOp::Id(_) => (),
                     _ => {
-                        eprintln!("error: table {}: {}: complex array size expressions not supported for marshalling",
-                                  &table.name, &array_entry.name);
+                        eprintln!(
+                            "error: table {}: {}: complex array size expressions not supported for marshalling",
+                            &table.name, &array_entry.name
+                        );
                         return Err(io::Error::from(io::ErrorKind::InvalidData));
                     }
                 };
             }
 
             if !found_primary_array_member {
-                eprintln!("error: table {}: {}: no array member with matching config dependencies found for length specifier",
-                          &table.name, &entry.name);
+                eprintln!(
+                    "error: table {}: {}: no array member with matching config dependencies found for length specifier",
+                    &table.name, &entry.name
+                );
                 return Err(io::Error::from(io::ErrorKind::InvalidData));
             }
         }
@@ -405,7 +403,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         let mut iiiout = iiout.make_indent();
                         writeln!(&mut iiiout, "Ok({}) => {},", &acc_size_name, &acc_size_name)?;
                         writeln!(&mut iiiout, "Err(_) => {{")?;
-                        self.format_error_return(&mut iiiout.make_indent(), None, error_rc_size.unwrap())?;
+                        self.format_error_return(
+                            &mut iiiout.make_indent(),
+                            None,
+                            error_rc_size.unwrap(),
+                        )?;
                         writeln!(&mut iiiout, "}},")?;
                         writeln!(&mut iiout, "}};")?;
                         writeln!(
@@ -448,7 +450,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                             &member_name, &member_name
                         )?;
                         writeln!(&mut iiiout, "Err(_) => {{")?;
-                        self.format_error_return(&mut iiiout.make_indent(), None, error_rc_size.unwrap())?;
+                        self.format_error_return(
+                            &mut iiiout.make_indent(),
+                            None,
+                            error_rc_size.unwrap(),
+                        )?;
                         writeln!(&mut iiiout, "}},")?;
                         writeln!(&mut iiout, "}};")?;
                         writeln!(
@@ -762,10 +768,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         // calculate any <size>= specifier values upfront, so that they can get
         // marshalled below, possibly after the discriminant value.
         if !is_structure_member_repr {
-            let error_rc_size = self
-                .tables
-                .structures
-                .lookup_constant("TPM_RC_SIZE");
+            let error_rc_size = self.tables.structures.lookup_constant("TPM_RC_SIZE");
             for j in 0..table.entries.len() {
                 let entry = &table.entries[j];
                 match &entry.entry_type {
@@ -825,7 +828,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                         let mut iiiout = iiout.make_indent();
                         writeln!(&mut iiiout, "Ok({}) => {},", &acc_size_name, &acc_size_name)?;
                         writeln!(&mut iiiout, "Err(_) => {{")?;
-                        self.format_error_return(&mut iiiout.make_indent(), None, error_rc_size.unwrap())?;
+                        self.format_error_return(
+                            &mut iiiout.make_indent(),
+                            None,
+                            error_rc_size.unwrap(),
+                        )?;
                         writeln!(&mut iiiout, "}},")?;
                         writeln!(&mut iiout, "}};")?;
                         writeln!(&mut iiout)?;
@@ -863,7 +870,8 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             let enum_member_name = self.format_tagged_union_member_name(&selector);
             let enum_member_name = Self::camelize(&enum_member_name);
 
-            let selected_union_members = self.get_structure_selected_union_members(table, discriminant, &selector);
+            let selected_union_members =
+                self.get_structure_selected_union_members(table, discriminant, &selector);
             let selected_union_members_match_spec = selected_union_members
                 .iter()
                 .map(|(u, _, _)| {
