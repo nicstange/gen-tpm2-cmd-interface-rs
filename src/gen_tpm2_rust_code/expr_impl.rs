@@ -313,6 +313,10 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 for entry in &table.entries {
                     match &entry.entry_type {
                         UnionTableEntryType::Plain(plain_type) => {
+                            if plain_type.base_type.is_none() {
+                                // No type means empty.
+                                continue;
+                            }
                             let base_type = plain_type.resolved_base_type.as_ref().unwrap();
                             let member_size_type =
                                 self.determine_plain_member_max_size_type(base_type)?;
