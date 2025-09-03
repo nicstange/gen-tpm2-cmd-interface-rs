@@ -13,7 +13,7 @@ use structures::tables::StructuresPartTablesTypeIndex;
 use structures::type_table::TypeTable;
 use structures::value_range::ValueRange;
 
-use super::{code_writer, Tpm2InterfaceRustCodeGenerator};
+use super::{Tpm2InterfaceRustCodeGenerator, code_writer};
 
 impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     pub(super) fn format_enum_type_member_name(&self, table: &TypeTable, j: usize) -> String {
@@ -381,9 +381,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             } else {
                 ""
             };
-            writeln!(&mut iout,
-                     "{}fn unmarshal<'a>(buf: &'a [u8]{}) -> Result<(&'a [u8], Self), TpmErr> {{",
-                     pub_spec, limits_arg)?;
+            writeln!(
+                &mut iout,
+                "{}fn unmarshal<'a>(buf: &'a [u8]{}) -> Result<(&'a [u8], Self), TpmErr> {{",
+                pub_spec, limits_arg
+            )?;
             let mut iiout = iout.make_indent();
             writeln!(
                 &mut iiout,
@@ -525,19 +527,26 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         }
         if use_enum_repr && table_closure_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
             writeln!(out)?;
-            let definition_deps = table_closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
+            let definition_deps =
+                table_closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
             if !definition_deps.is_unconditional_true() {
                 writeln!(out, "#[cfg({})]", Self::format_deps(&definition_deps))?;
             }
 
-            writeln!(out, "impl convert::TryFrom<{}> for {} {{",
-                     Self::predefined_type_to_rust(base_type),
-                     Self::camelize(&table_name))?;
+            writeln!(
+                out,
+                "impl convert::TryFrom<{}> for {} {{",
+                Self::predefined_type_to_rust(base_type),
+                Self::camelize(&table_name)
+            )?;
             let mut iout = out.make_indent();
             writeln!(&mut iout, "type Error = TpmErr;")?;
             writeln!(&mut iout)?;
-            writeln!(&mut iout, "fn try_from(value: {}) -> Result<Self, TpmErr> {{",
-                     Self::predefined_type_to_rust(base_type))?;
+            writeln!(
+                &mut iout,
+                "fn try_from(value: {}) -> Result<Self, TpmErr> {{",
+                Self::predefined_type_to_rust(base_type)
+            )?;
             let mut iiout = iout.make_indent();
 
             let error_rc = table.resolved_error_rc.unwrap_or_else(|| {
@@ -617,19 +626,24 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         table: &TypeTable,
         enable_enum_transmute: bool,
     ) -> Result<(), io::Error> {
-
         if !table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION)
-            || !table.closure_deps_conditional.any(ClosureDepsFlags::ANY_DEFINITION)
+            || !table
+                .closure_deps_conditional
+                .any(ClosureDepsFlags::ANY_DEFINITION)
         {
-            return Ok(())
+            return Ok(());
         }
 
         let table_name_noncond = Self::camelize(&table.name);
         let table_name_cond = Self::camelize(&(table.name.clone() + "_W_C_V"));
 
         writeln!(out)?;
-        let config_deps_noncond = table.closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
-        let mut config_deps_cond = table.closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
+        let config_deps_noncond = table
+            .closure_deps
+            .collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
+        let mut config_deps_cond = table
+            .closure_deps_conditional
+            .collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
         if config_deps_cond.is_implied_by(&config_deps_noncond) {
             if !config_deps_noncond.is_unconditional_true() {
                 writeln!(out, "#[cfg({})]", Self::format_deps(&config_deps_noncond))?;
@@ -640,17 +654,32 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             }
         } else {
             config_deps_cond.factor_by_common_of(&config_deps_noncond);
-            writeln!(out, "#[cfg(and({}, {}))]",
-                     Self::format_deps(&config_deps_noncond),
-                     Self::format_deps(&config_deps_cond))?;
+            writeln!(
+                out,
+                "#[cfg(and({}, {}))]",
+                Self::format_deps(&config_deps_noncond),
+                Self::format_deps(&config_deps_cond)
+            )?;
         }
 
-        writeln!(out, "impl convert::From<{}> for {} {{", &table_name_noncond, &table_name_cond)?;
+        writeln!(
+            out,
+            "impl convert::From<{}> for {} {{",
+            &table_name_noncond, &table_name_cond
+        )?;
         let mut iout = out.make_indent();
-        writeln!(&mut iout, "fn from(value: {}) -> Self {{", table_name_noncond)?;
+        writeln!(
+            &mut iout,
+            "fn from(value: {}) -> Self {{",
+            table_name_noncond
+        )?;
         let mut iiout = iout.make_indent();
         if enable_enum_transmute {
-            writeln!(&mut iiout, "unsafe {{ mem::transmute::<{}, Self>(value) }}", table_name_noncond)?;
+            writeln!(
+                &mut iiout,
+                "unsafe {{ mem::transmute::<{}, Self>(value) }}",
+                table_name_noncond
+            )?;
         } else {
             writeln!(&mut iiout, "match value {{")?;
             let mut iiiout = iiout.make_indent();
@@ -673,7 +702,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
                 let name = self.format_enum_type_member_name(table, j);
                 let name = Self::camelize(&name);
-                writeln!(&mut iiiout, "{}::{} => Self::{},", table_name_noncond, &name, &name)?;
+                writeln!(
+                    &mut iiiout,
+                    "{}::{} => Self::{},",
+                    table_name_noncond, &name, &name
+                )?;
             }
             writeln!(&mut iiout, "}}")?;
         }
@@ -690,16 +723,27 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 writeln!(out, "#[cfg({})]", Self::format_deps(&config_deps_cond))?;
             }
         } else {
-            writeln!(out, "#[cfg(and({}, {}))]",
-                     Self::format_deps(&config_deps_noncond),
-                     Self::format_deps(&config_deps_cond))?;
+            writeln!(
+                out,
+                "#[cfg(and({}, {}))]",
+                Self::format_deps(&config_deps_noncond),
+                Self::format_deps(&config_deps_cond)
+            )?;
         }
 
-        writeln!(out, "impl convert::TryFrom<{}> for {} {{", &table_name_cond, &table_name_noncond)?;
+        writeln!(
+            out,
+            "impl convert::TryFrom<{}> for {} {{",
+            &table_name_cond, &table_name_noncond
+        )?;
         let mut iout = out.make_indent();
         writeln!(&mut iout, "type Error = TpmErr;")?;
         writeln!(&mut iout)?;
-        writeln!(&mut iout, "fn try_from(value: {}) -> Result<Self, TpmErr> {{", table_name_cond)?;
+        writeln!(
+            &mut iout,
+            "fn try_from(value: {}) -> Result<Self, TpmErr> {{",
+            table_name_cond
+        )?;
         let mut iiout = iout.make_indent();
         let error_rc = table.resolved_error_rc.unwrap_or_else(|| {
             self.tables
@@ -737,8 +781,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             writeln!(&mut iiiout, "_ => (),")?;
             writeln!(&mut iiout, "}};")?;
             writeln!(&mut iiout)?;
-            writeln!(&mut iiout, "let result = unsafe {{ mem::transmute::<{}, Self>(value) }};",
-                     table_name_cond)?;
+            writeln!(
+                &mut iiout,
+                "let result = unsafe {{ mem::transmute::<{}, Self>(value) }};",
+                table_name_cond
+            )?;
             writeln!(&mut iiout, "Ok(result)")?;
         } else {
             writeln!(&mut iiout, "let result = match value {{")?;
@@ -763,7 +810,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     self.format_error_return(&mut iiiout.make_indent(), None, error_rc)?;
                     writeln!(&mut iiiout, "}},")?;
                 } else {
-                    writeln!(&mut iiiout, "{}::{} => Self::{},", table_name_cond, &name, &name)?;
+                    writeln!(
+                        &mut iiiout,
+                        "{}::{} => Self::{},",
+                        table_name_cond, &name, &name
+                    )?;
                 }
             }
             writeln!(&mut iiout, "}};")?;
@@ -785,23 +836,34 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 writeln!(out, "#[cfg({})]", Self::format_deps(&config_deps_cond))?;
             }
         } else {
-            writeln!(out, "#[cfg(and({}, {}))]",
-                     Self::format_deps(&config_deps_noncond),
-                     Self::format_deps(&config_deps_cond))?;
+            writeln!(
+                out,
+                "#[cfg(and({}, {}))]",
+                Self::format_deps(&config_deps_noncond),
+                Self::format_deps(&config_deps_cond)
+            )?;
         }
-        writeln!(out, "impl cmp::PartialEq<{}> for {} {{",
-                 &table_name_noncond, &table_name_cond)?;
+        writeln!(
+            out,
+            "impl cmp::PartialEq<{}> for {} {{",
+            &table_name_noncond, &table_name_cond
+        )?;
         let mut iout = out.make_indent();
-        writeln!(&mut iout, "fn eq(&self, other: &{}) -> bool {{",
-                 &table_name_noncond)?;
+        writeln!(
+            &mut iout,
+            "fn eq(&self, other: &{}) -> bool {{",
+            &table_name_noncond
+        )?;
         let mut iiout = iout.make_indent();
         let base_type = table.underlying_type.unwrap();
-        writeln!(&mut iiout, "*self as {} == *other as {}",
-                 Self::predefined_type_to_rust(base_type),
-                 Self::predefined_type_to_rust(base_type))?;
+        writeln!(
+            &mut iiout,
+            "*self as {} == *other as {}",
+            Self::predefined_type_to_rust(base_type),
+            Self::predefined_type_to_rust(base_type)
+        )?;
         writeln!(&mut iout, "}}")?;
         writeln!(out, "}}")?;
-
 
         writeln!(out)?;
         if config_deps_cond.is_implied_by(&config_deps_noncond) {
@@ -813,15 +875,24 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 writeln!(out, "#[cfg({})]", Self::format_deps(&config_deps_cond))?;
             }
         } else {
-            writeln!(out, "#[cfg(and({}, {}))]",
-                     Self::format_deps(&config_deps_noncond),
-                     Self::format_deps(&config_deps_cond))?;
+            writeln!(
+                out,
+                "#[cfg(and({}, {}))]",
+                Self::format_deps(&config_deps_noncond),
+                Self::format_deps(&config_deps_cond)
+            )?;
         }
-        writeln!(out, "impl cmp::PartialEq<{}> for {} {{",
-                 &table_name_cond, &table_name_noncond)?;
+        writeln!(
+            out,
+            "impl cmp::PartialEq<{}> for {} {{",
+            &table_name_cond, &table_name_noncond
+        )?;
         let mut iout = out.make_indent();
-        writeln!(&mut iout, "fn eq(&self, other: &{}) -> bool {{",
-                 &table_name_cond)?;
+        writeln!(
+            &mut iout,
+            "fn eq(&self, other: &{}) -> bool {{",
+            &table_name_cond
+        )?;
         writeln!(&mut iout.make_indent(), "other.eq(self)")?;
         writeln!(&mut iout, "}}")?;
         writeln!(out, "}}")?;

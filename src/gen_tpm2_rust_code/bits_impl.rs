@@ -516,6 +516,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         writeln!(out, "}}")?;
 
         writeln!(out)?;
+        let from_impl_deps = table
+            .closure_deps
+            .collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
+        if !from_impl_deps.is_unconditional_true() {
+            writeln!(out, "#[cfg({})]", Self::format_deps(&from_impl_deps))?;
+        }
         if table.reserved.is_empty() {
             writeln!(out, "impl convert::From<{}> for {} {{",
                      Self::predefined_type_to_rust(base_type), Self::camelize(&table.name))?;

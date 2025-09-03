@@ -92,7 +92,6 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             ("", "")
         };
 
-        tagged_union_config_deps.factor_by_common_of(&discriminant_config_deps);
         if tagged_union_config_deps.is_implied_by(&discriminant_config_deps) {
             if !discriminant_config_deps.is_unconditional_true() {
                 writeln!(
@@ -111,7 +110,6 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             }
         } else {
             tagged_union_config_deps.factor_by_common_of(&discriminant_config_deps);
-            discriminant_config_deps.factor_by_common_of(&tagged_union_config_deps);
             writeln!(
                 out,
                 "#[cfg(and({}, {}))]",
@@ -266,7 +264,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             .closure_deps
             .collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
         let mut config_deps_cond = table
-            .closure_deps
+            .closure_deps_conditional
             .collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
         if config_deps_cond.is_implied_by(&config_deps_noncond) {
             if !config_deps_noncond.is_unconditional_true() {
