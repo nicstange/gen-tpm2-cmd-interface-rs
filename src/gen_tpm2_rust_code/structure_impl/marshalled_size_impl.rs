@@ -1182,7 +1182,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 max_size_name,
                 Self::predefined_type_to_rust(size_type)
             )?;
-            writeln!(out.make_indent(), "{}_marshalled_size()", type_spec)?;
+            writeln!(
+                out.make_indent(),
+                "{}_marshalled_{}()",
+                type_spec,
+                max_size_name
+            )?;
             writeln!(out, "}}")?;
         } else {
             writeln!(
@@ -1192,7 +1197,12 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 max_size_name,
                 Self::predefined_type_to_rust(size_type)
             )?;
-            writeln!(out.make_indent(), "{}_marshalled_size(limits)", type_spec)?;
+            writeln!(
+                out.make_indent(),
+                "{}_marshalled_{}(limits)",
+                type_spec,
+                max_size_name
+            )?;
             writeln!(out, "}}")?;
         }
         Ok(())
