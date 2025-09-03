@@ -981,8 +981,16 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             let discriminant_member = discriminant_members[0];
             let discriminant = &table.entries[discriminant_member].entry_type;
             let discriminant = Self::to_structure_discriminant_entry_type(discriminant);
-            let discriminant_base = match discriminant.resolved_discriminant_type.as_ref().unwrap()
-            {
+            let discriminant_type = discriminant.resolved_discriminant_type.as_ref().unwrap();
+            let discriminant_enable_conditional =
+                if discriminant.discriminant_type_enable_conditional {
+                    true
+                } else if discriminant.discriminant_type_conditional {
+                    conditional
+                } else {
+                    false
+                };
+            let discriminant_base = match &discriminant_type {
                 StructureTableEntryResolvedDiscriminantType::Constants(i) => self
                     .tables
                     .structures
@@ -994,19 +1002,36 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 }
             };
 
-            if enable_enum_transmute || enable_in_place_unmarshal {
-                writeln!(
-                    out,
-                    "#[repr(C, {})]",
+            // One cannot have a 'repr()' attribute on empty enums.  If the enum is not
+            // unconditionally non-empty, wrap it in a cfg_attr().
+            let mut any_deps = ConfigDepsDisjunction::empty();
+            for selector in UnionSelectorIterator::new(
+                &self.tables.structures,
+                *discriminant_type,
+                discriminant_enable_conditional,
+            ) {
+                let deps = selector.config_deps().factor_by_common_of(&table_deps);
+                any_deps.insert(deps);
+            }
+            let repr_spec = if enable_enum_transmute || enable_in_place_unmarshal {
+                format!(
+                    "repr(C, {})",
                     Self::predefined_type_to_rust(discriminant_base)
-                )?;
+                )
+            } else {
+                format!("repr({})", Self::predefined_type_to_rust(discriminant_base))
+            };
+            if any_deps.is_unconditional_true() {
+                writeln!(out, "#[{}]", repr_spec)?;
             } else {
                 writeln!(
                     out,
-                    "#[repr({})]",
-                    Self::predefined_type_to_rust(discriminant_base)
+                    "#[cfg_attr({}, {})]",
+                    Self::format_deps(&any_deps),
+                    repr_spec
                 )?;
             }
+
             if table_is_public {
                 write!(out, "pub ")?
             }
@@ -1558,18 +1583,26 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     continue;
                 }
 
-                let discriminant_base =
-                    match discriminant.resolved_discriminant_type.as_ref().unwrap() {
-                        StructureTableEntryResolvedDiscriminantType::Constants(i) => self
-                            .tables
-                            .structures
-                            .get_constants(*i)
-                            .resolved_base
-                            .unwrap(),
-                        StructureTableEntryResolvedDiscriminantType::Type(i) => {
-                            self.tables.structures.get_type(*i).underlying_type.unwrap()
-                        }
+                let discriminant_type = discriminant.resolved_discriminant_type.as_ref().unwrap();
+                let discriminant_enable_conditional =
+                    if discriminant.discriminant_type_enable_conditional {
+                        true
+                    } else if discriminant.discriminant_type_conditional {
+                        conditional
+                    } else {
+                        false
                     };
+                let discriminant_base = match discriminant_type {
+                    StructureTableEntryResolvedDiscriminantType::Constants(i) => self
+                        .tables
+                        .structures
+                        .get_constants(*i)
+                        .resolved_base
+                        .unwrap(),
+                    StructureTableEntryResolvedDiscriminantType::Type(i) => {
+                        self.tables.structures.get_type(*i).underlying_type.unwrap()
+                    }
+                };
 
                 let mut make_public = definition_is_public;
                 // If the sibling containing structure with conditionals enabled needs
@@ -1614,19 +1647,36 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     writeln!(out, "#[derive(Debug, PartialEq)]")?;
                 }
 
-                if enable_enum_transmute || enable_in_place_unmarshal {
-                    writeln!(
-                        out,
-                        "#[repr(C, {})]",
+                // One cannot have a 'repr()' attribute on empty enums.  If the enum is not
+                // unconditionally non-empty, wrap it in a cfg_attr().
+                let mut any_deps = ConfigDepsDisjunction::empty();
+                for selector in UnionSelectorIterator::new(
+                    &self.tables.structures,
+                    *discriminant_type,
+                    discriminant_enable_conditional,
+                ) {
+                    let deps = selector.config_deps().factor_by_common_of(&table_deps);
+                    any_deps.insert(deps);
+                }
+                let repr_spec = if enable_enum_transmute || enable_in_place_unmarshal {
+                    format!(
+                        "repr(C, {})",
                         Self::predefined_type_to_rust(discriminant_base)
-                    )?;
+                    )
+                } else {
+                    format!("repr({})", Self::predefined_type_to_rust(discriminant_base))
+                };
+                if any_deps.is_unconditional_true() {
+                    writeln!(out, "#[{}]", repr_spec)?;
                 } else {
                     writeln!(
                         out,
-                        "#[repr({})]",
-                        Self::predefined_type_to_rust(discriminant_base)
+                        "#[cfg_attr({}, {})]",
+                        Self::format_deps(&any_deps),
+                        repr_spec
                     )?;
                 }
+
                 let pub_spec = if make_public { "pub " } else { "" };
                 writeln!(
                     out,

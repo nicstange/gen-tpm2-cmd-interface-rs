@@ -5,6 +5,7 @@
 use std::io::{self, Write};
 
 use crate::tcg_tpm2::structures;
+use structures::deps::ConfigDepsDisjunction;
 use structures::structure_table::{StructureTable, StructureTableEntryResolvedDiscriminantType};
 use structures::table_common::{ClosureDeps, ClosureDepsFlags};
 use structures::tables::UnionSelectorIterator;
@@ -33,6 +34,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         let mut tagged_union_config_deps =
             closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
 
+        let discriminant_type = discriminant.resolved_discriminant_type.as_ref().unwrap();
         let discriminant_enable_conditional = if discriminant.discriminant_type_enable_conditional {
             true
         } else if discriminant.discriminant_type_conditional {
@@ -40,38 +42,37 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         } else {
             false
         };
-        let (discriminant_type_name, mut discriminant_config_deps) =
-            match discriminant.resolved_discriminant_type.as_ref().unwrap() {
-                StructureTableEntryResolvedDiscriminantType::Constants(i) => {
-                    let constants_table = self.tables.structures.get_constants(*i);
-                    let discriminant_type_name = Self::camelize(&constants_table.name);
+        let (discriminant_type_name, mut discriminant_config_deps) = match discriminant_type {
+            StructureTableEntryResolvedDiscriminantType::Constants(i) => {
+                let constants_table = self.tables.structures.get_constants(*i);
+                let discriminant_type_name = Self::camelize(&constants_table.name);
+                (
+                    discriminant_type_name,
+                    constants_table
+                        .closure_deps
+                        .collect_config_deps(ClosureDepsFlags::ANY_DEFINITION),
+                )
+            }
+            StructureTableEntryResolvedDiscriminantType::Type(i) => {
+                let type_table = self.tables.structures.get_type(*i);
+                if discriminant_enable_conditional {
+                    let discriminant_type_name = type_table.name.clone() + "_W_C_V";
+                    let discriminant_type_name = Self::camelize(&discriminant_type_name);
+                    let closure_deps = &type_table.closure_deps_conditional;
                     (
                         discriminant_type_name,
-                        constants_table
-                            .closure_deps
-                            .collect_config_deps(ClosureDepsFlags::ANY_DEFINITION),
+                        closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION),
+                    )
+                } else {
+                    let discriminant_type_name = Self::camelize(&type_table.name);
+                    let closure_deps = &type_table.closure_deps;
+                    (
+                        discriminant_type_name,
+                        closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION),
                     )
                 }
-                StructureTableEntryResolvedDiscriminantType::Type(i) => {
-                    let type_table = self.tables.structures.get_type(*i);
-                    if discriminant_enable_conditional {
-                        let discriminant_type_name = type_table.name.clone() + "_W_C_V";
-                        let discriminant_type_name = Self::camelize(&discriminant_type_name);
-                        let closure_deps = &type_table.closure_deps_conditional;
-                        (
-                            discriminant_type_name,
-                            closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION),
-                        )
-                    } else {
-                        let discriminant_type_name = Self::camelize(&type_table.name);
-                        let closure_deps = &type_table.closure_deps;
-                        (
-                            discriminant_type_name,
-                            closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION),
-                        )
-                    }
-                }
-            };
+            }
+        };
 
         let contains_array = self.tagged_union_contains_array(table, discriminant);
         let references_inbuf =
@@ -131,8 +132,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         )?;
         let mut iiout = iout.make_indent();
         if enable_enum_transmute {
-            let discriminant_base = match discriminant.resolved_discriminant_type.as_ref().unwrap()
-            {
+            let discriminant_base = match discriminant_type {
                 StructureTableEntryResolvedDiscriminantType::Constants(i) => self
                     .tables
                     .structures
@@ -155,6 +155,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         } else {
             writeln!(&mut iiout, "match value {{")?;
             let mut iiiout = iiout.make_indent();
+            let mut any_deps = ConfigDepsDisjunction::empty();
             for selector in UnionSelectorIterator::new(
                 &self.tables.structures,
                 *discriminant.resolved_discriminant_type.as_ref().unwrap(),
@@ -163,6 +164,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 let deps = selector.config_deps();
                 let deps = deps.factor_by_common_of(&tagged_union_config_deps);
                 let deps = deps.factor_by_common_of(&discriminant_config_deps);
+                any_deps.insert(deps.clone());
                 if !deps.is_unconditional_true() {
                     writeln!(
                         &mut iiiout,
@@ -218,6 +220,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                     )?;
                 }
             }
+
+            if !any_deps.is_unconditional_true() {
+                // The enum might have none of its members enabled, i.e. it's empty. For Rust,
+                // "references are always considered inhabited". So add a dummy catch-all match arm for
+                // this case.
+                writeln!(&mut iiiout, "#[cfg(not({}))]", Self::format_deps(&any_deps))?;
+                writeln!(&mut iiiout, "_ => unreachable!(),")?;
+            }
+
             writeln!(&mut iiout, "}}")?;
         }
 
@@ -321,6 +332,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         let mut iiout = iout.make_indent();
         writeln!(&mut iiout, "match value {{")?;
         let mut iiiout = iiout.make_indent();
+        let mut any_deps = ConfigDepsDisjunction::empty();
         for selector in UnionSelectorIterator::new(
             &self.tables.structures,
             *discriminant.resolved_discriminant_type.as_ref().unwrap(),
@@ -329,6 +341,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             let deps = &selector.config_deps();
             let deps = deps.factor_by_common_of(&config_deps_noncond);
             let deps = deps.factor_by_common_of(&config_deps_cond);
+            any_deps.insert(deps.clone());
             if !deps.is_unconditional_true() {
                 writeln!(
                     &mut iiiout,
@@ -379,6 +392,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 )?;
             }
         }
+
+        if !any_deps.is_unconditional_true() {
+            // The enum might have none of its members enabled, i.e. it's empty. For Rust,
+            // "references are always considered inhabited". So add a dummy catch-all match arm for
+            // this case.
+            writeln!(&mut iiiout, "#[cfg(not({}))]", Self::format_deps(&any_deps))?;
+            writeln!(&mut iiiout, "_ => unreachable!(),")?;
+        }
+
         writeln!(&mut iiout, "}}")?;
         writeln!(&mut iout, "}}")?;
         writeln!(out, "}}")?;

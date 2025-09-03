@@ -5,6 +5,7 @@
 use std::io::{self, Write};
 
 use crate::tcg_tpm2::structures;
+use crate::tcg_tpm2::structures::deps::ConfigDepsDisjunction;
 use structures::constants_table::ConstantsTable;
 use structures::expr::{Expr, ExprId, ExprOp, ExprResolvedId, ExprValue};
 use structures::predefined::{PredefinedTypeRef, PredefinedTypes};
@@ -14,7 +15,7 @@ use structures::tables::{
     StructuresPartTablesIndex,
 };
 
-use super::{code_writer, Tpm2InterfaceRustCodeGenerator};
+use super::{Tpm2InterfaceRustCodeGenerator, code_writer};
 
 impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
     pub(super) fn strip_constant_table_prefix(
@@ -256,7 +257,29 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
         } else if use_enum_repr {
             let base_type = table.resolved_base.unwrap();
             writeln!(out, "#[derive(Clone, Copy, Debug, PartialEq, Eq)]")?;
-            writeln!(out, "#[repr({})]", Self::predefined_type_to_rust(base_type))?;
+
+            // One cannot have a 'repr()' attribute on empty enums.  If the enum is not
+            // unconditionally non-empty, wrap it in a cfg_attr().
+            let mut any_deps = ConfigDepsDisjunction::empty();
+            for j in 0..table.entries.len() {
+                let entry = &table.entries[j];
+                let mut deps = entry
+                    .closure_deps
+                    .collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
+                deps.factor_by_common_of(&table_deps);
+                any_deps.merge_from(&deps);
+            }
+            if any_deps.is_unconditional_true() {
+                writeln!(out, "#[repr({})]", Self::predefined_type_to_rust(base_type))?;
+            } else {
+                writeln!(
+                    out,
+                    "#[cfg_attr({}, repr({}))]",
+                    Self::format_deps(&any_deps),
+                    Self::predefined_type_to_rust(base_type)
+                )?;
+            }
+
             if table_is_public {
                 write!(out, "pub ")?;
             }
@@ -598,9 +621,11 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             } else {
                 ""
             };
-            writeln!(&mut iout,
-                     "{}fn unmarshal<'a>(buf: &'a [u8]{}) -> Result<(&'a [u8], Self), TpmErr> {{",
-                     pub_spec, limits_arg)?;
+            writeln!(
+                &mut iout,
+                "{}fn unmarshal<'a>(buf: &'a [u8]{}) -> Result<(&'a [u8], Self), TpmErr> {{",
+                pub_spec, limits_arg
+            )?;
             let mut iiout = iout.make_indent();
             let base_type = table.resolved_base.unwrap();
             writeln!(
@@ -695,19 +720,27 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
 
         if use_enum_repr && table.closure_deps.any(ClosureDepsFlags::ANY_DEFINITION) {
             writeln!(out)?;
-            let definition_deps = table.closure_deps.collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
+            let definition_deps = table
+                .closure_deps
+                .collect_config_deps(ClosureDepsFlags::ANY_DEFINITION);
             if !definition_deps.is_unconditional_true() {
                 writeln!(out, "#[cfg({})]", Self::format_deps(&definition_deps))?;
             }
             let base_type = table.resolved_base.unwrap();
-            writeln!(out, "impl convert::TryFrom<{}> for {} {{",
-                     Self::predefined_type_to_rust(base_type),
-                     Self::camelize(&table.name))?;
+            writeln!(
+                out,
+                "impl convert::TryFrom<{}> for {} {{",
+                Self::predefined_type_to_rust(base_type),
+                Self::camelize(&table.name)
+            )?;
             let mut iout = out.make_indent();
             writeln!(&mut iout, "type Error = TpmErr;")?;
             writeln!(&mut iout)?;
-            writeln!(&mut iout, "fn try_from(value: {}) -> Result<Self, TpmErr> {{",
-                     Self::predefined_type_to_rust(base_type))?;
+            writeln!(
+                &mut iout,
+                "fn try_from(value: {}) -> Result<Self, TpmErr> {{",
+                Self::predefined_type_to_rust(base_type)
+            )?;
             let mut iiout = iout.make_indent();
 
             let error_rc = &table.resolved_error_rc.unwrap_or_else(|| {

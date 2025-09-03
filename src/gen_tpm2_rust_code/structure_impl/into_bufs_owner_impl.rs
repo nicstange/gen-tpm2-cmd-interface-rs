@@ -505,6 +505,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 enable_allocator_api.then_some(", A").unwrap_or("")
             )?;
             let mut iout = out.make_indent();
+            let mut any_deps = ConfigDepsDisjunction::empty();
             writeln!(&mut iout, "match self {{")?;
             let mut iiout = iout.make_indent();
             for selector in UnionSelectorIterator::new(
@@ -515,6 +516,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 let deps = selector.config_deps().factor_by_common_of(table_deps);
                 let deps = deps.factor_by_common_of(table_deps);
                 let deps = deps.factor_by_common_of(&into_bufs_owner_deps);
+                any_deps.insert(deps.clone());
                 if !deps.is_unconditional_true() {
                     writeln!(
                         &mut iiout,
@@ -672,6 +674,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 }
                 writeln!(&mut iiout, "}},")?;
             }
+
+            if !any_deps.is_unconditional_true() {
+                // The enum might have none of its members enabled, i.e. it's empty. For Rust,
+                // "references are always considered inhabited". So add a dummy catch-all match arm for
+                // this case.
+                writeln!(&mut iiout, "#[cfg(not({}))]", Self::format_deps(&any_deps))?;
+                writeln!(&mut iiout, "_ => unreachable!(),")?;
+            }
+
             writeln!(&mut iout, "}}")?;
             writeln!(out, "}}")?;
         } else {
@@ -683,6 +694,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             let mut iout = out.make_indent();
             writeln!(&mut iout, "match self {{")?;
             let mut iiout = iout.make_indent();
+            let mut any_deps = ConfigDepsDisjunction::empty();
             for selector in UnionSelectorIterator::new(
                 &self.tables.structures,
                 *discriminant_type,
@@ -691,6 +703,7 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 let deps = selector.config_deps().factor_by_common_of(table_deps);
                 let deps = deps.factor_by_common_of(table_deps);
                 let deps = deps.factor_by_common_of(&into_bufs_owner_deps);
+                any_deps.insert(deps.clone());
                 if !deps.is_unconditional_true() {
                     writeln!(
                         &mut iiout,
@@ -832,6 +845,15 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
                 }
                 writeln!(&mut iiout, "}},")?;
             }
+
+            if !any_deps.is_unconditional_true() {
+                // The enum might have none of its members enabled, i.e. it's empty. For Rust,
+                // "references are always considered inhabited". So add a dummy catch-all match arm for
+                // this case.
+                writeln!(&mut iiout, "#[cfg(not({}))]", Self::format_deps(&any_deps))?;
+                writeln!(&mut iiout, "_ => unreachable!(),")?;
+            }
+
             writeln!(&mut iout, "}};")?;
             writeln!(&mut iout)?;
             writeln!(&mut iout, "Ok(())")?;

@@ -6,6 +6,7 @@ use std::borrow;
 use std::io::{self, Write};
 
 use crate::tcg_tpm2::structures;
+use structures::deps::ConfigDepsDisjunction;
 use structures::expr::{Expr, ExprValue};
 use structures::predefined::PredefinedTypes;
 use structures::table_common::ClosureDepsFlags;
@@ -212,7 +213,29 @@ impl<'a> Tpm2InterfaceRustCodeGenerator<'a> {
             writeln!(out, "struct {} {{}}", Self::camelize(&table_name))?;
         } else if use_enum_repr {
             writeln!(out, "#[derive(Clone, Copy, Debug, PartialEq, Eq)]")?;
-            writeln!(out, "#[repr({})]", Self::predefined_type_to_rust(base_type))?;
+
+            // One cannot have a 'repr()' attribute on empty enums.  If the enum is not
+            // unconditionally non-empty, wrap it in a cfg_attr().
+            let mut any_deps = ConfigDepsDisjunction::empty();
+            for j in 0..table.entries.len() {
+                let entry = &table.entries[j];
+                if !conditional && entry.conditional {
+                    continue;
+                }
+                let deps = entry.deps.factor_by_common_of(&table_deps);
+                any_deps.insert(deps);
+            }
+            if any_deps.is_unconditional_true() {
+                writeln!(out, "#[repr({})]", Self::predefined_type_to_rust(base_type))?;
+            } else {
+                writeln!(
+                    out,
+                    "#[cfg_attr({}, repr({}))]",
+                    Self::format_deps(&any_deps),
+                    Self::predefined_type_to_rust(base_type)
+                )?;
+            }
+
             if table_is_public {
                 write!(out, "pub ")?
             }
